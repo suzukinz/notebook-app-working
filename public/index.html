@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    
+    <!-- PWA メタタグ -->
+    <meta name="theme-color" content="#3B82F6" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="NoteSpace" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    
+    <!-- PWA アイコン -->
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="%PUBLIC_URL%/logo192.png" />
+    
+    <!-- Splash Screen (iOS) -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/logo512.png" />
+    
+    <!-- マニフェスト -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    
+    <meta name="description" content="階層型ノート管理アプリケーション。ワークスペース、ノートブック、フォルダでノートを整理し、マインドマップ機能で視覚的に管理できます。" />
+    <meta name="keywords" content="ノート,メモ,階層,管理,マインドマップ,PWA,オフライン" />
+    <meta name="author" content="NoteSpace Team" />
+    
+    <!-- OGP タグ -->
+    <meta property="og:title" content="NoteSpace - 階層型ノートアプリ" />
+    <meta property="og:description" content="強力な階層型ノート作成アプリケーション。マインドマップ機能付き。" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="%PUBLIC_URL%/logo512.png" />
+    
+    <title>NoteSpace - 階層型ノートアプリ</title>
+    
+    <!-- FlipClock dependencies -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.43/moment-timezone-with-data.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/flipclock/0.7.8/flipclock.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flipclock/0.7.8/flipclock.css">
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    
+    <!-- Service Worker 登録 -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('SW registered: ', registration);
+              
+              // アップデート確認
+              registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                if (newWorker) {
+                  newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed') {
+                      if (navigator.serviceWorker.controller) {
+                        // 新しいバージョンが利用可能
+                        console.log('New version available');
+                        // ユーザーに更新を促す通知を表示することもできる
+                      }
+                    }
+                  });
+                }
+              });
+            })
+            .catch((registrationError) => {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+      }
+
+      // PWA インストール機能
+      let deferredPrompt;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        console.log('PWA install prompt');
+        e.preventDefault();
+        deferredPrompt = e;
+        // インストールボタンを表示する（後でReactコンポーネントで実装）
+        window.showInstallPrompt = true;
+      });
+
+      window.addEventListener('appinstalled', (evt) => {
+        console.log('PWA was installed');
+        window.showInstallPrompt = false;
+      });
+
+      // PWA インストール関数をグローバルに公開
+      window.installPWA = () => {
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.then((choiceResult) => {
+            if (choiceResult.outcome === 'accepted') {
+              console.log('User accepted the install prompt');
+            } else {
+              console.log('User dismissed the install prompt');
+            }
+            deferredPrompt = null;
+            window.showInstallPrompt = false;
+          });
+        }
+      };
+    </script>
+  </body>
+</html>

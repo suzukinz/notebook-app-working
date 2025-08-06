@@ -1,0 +1,328 @@
+/* アクセシビリティ関連スタイル */
+
+/* 高コントラストモード */
+.high-contrast {
+  --text-primary: #000000 !important;
+  --text-secondary: #333333 !important;
+  --bg-primary: #FFFFFF !important;
+  --bg-secondary: #F5F5F5 !important;
+  --border-primary: #000000 !important;
+  --focus-ring: #0066CC !important;
+}
+
+.high-contrast * {
+  border-color: var(--border-primary) !important;
+}
+
+.high-contrast .bg-gray-50,
+.high-contrast .bg-gray-100 {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+.high-contrast .bg-white {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.high-contrast .text-gray-600,
+.high-contrast .text-gray-700,
+.high-contrast .text-gray-800,
+.high-contrast .text-gray-900 {
+  color: var(--text-primary) !important;
+}
+
+.high-contrast .text-gray-400,
+.high-contrast .text-gray-500 {
+  color: var(--text-secondary) !important;
+}
+
+/* アニメーション軽減 */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* 大きなテキスト */
+.large-text {
+  font-size: var(--font-size-base, 18px);
+}
+
+.large-text .text-sm {
+  font-size: var(--font-size-sm, 16px) !important;
+}
+
+.large-text .text-lg {
+  font-size: var(--font-size-lg, 22px) !important;
+}
+
+.large-text .text-xl {
+  font-size: 24px !important;
+}
+
+.large-text .text-2xl {
+  font-size: 28px !important;
+}
+
+/* カラーブラインド対応 */
+.colorblind-friendly .bg-red-500,
+.colorblind-friendly .bg-red-600 {
+  background-color: #D55E00 !important; /* 朱色 */
+}
+
+.colorblind-friendly .bg-green-500,
+.colorblind-friendly .bg-green-600 {
+  background-color: #009E73 !important; /* 青みがかった緑 */
+}
+
+.colorblind-friendly .bg-blue-500,
+.colorblind-friendly .bg-blue-600 {
+  background-color: #0072CE !important; /* 明るい青 */
+}
+
+.colorblind-friendly .bg-yellow-500,
+.colorblind-friendly .bg-yellow-600 {
+  background-color: #F0E442 !important; /* 黄色 */
+}
+
+.colorblind-friendly .bg-orange-500,
+.colorblind-friendly .bg-orange-600 {
+  background-color: #E69F00 !important; /* オレンジ */
+}
+
+.colorblind-friendly .bg-purple-500,
+.colorblind-friendly .bg-purple-600 {
+  background-color: #CC79A7 !important; /* 薄いピンク */
+}
+
+/* フォーカスインジケーター */
+.focus-default *:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.focus-enhanced *:focus {
+  outline: 3px solid #3b82f6;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+.focus-high-contrast *:focus {
+  outline: 4px solid #000000;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 6px #000000;
+}
+
+/* ボタンのフォーカス改善 */
+.focus-enhanced button:focus,
+.focus-high-contrast button:focus {
+  position: relative;
+  z-index: 10;
+}
+
+/* スクリーンリーダー専用テキスト */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* スクリーンリーダー用、フォーカス時のみ表示 */
+.sr-only-focusable:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: inherit;
+  margin: inherit;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* スキップリンク */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 6px;
+  background: #000000;
+  color: #ffffff;
+  padding: 8px;
+  text-decoration: none;
+  border-radius: 4px;
+  z-index: 100;
+  font-weight: bold;
+}
+
+.skip-link:focus {
+  top: 6px;
+}
+
+/* 高コントラストモードでのボタンスタイル */
+.high-contrast button {
+  border: 2px solid #000000 !important;
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+.high-contrast button:hover {
+  background-color: #f0f0f0 !important;
+}
+
+.high-contrast button:disabled {
+  border-color: #666666 !important;
+  color: #666666 !important;
+  background-color: #f5f5f5 !important;
+}
+
+/* 高コントラストモードでのリンクスタイル */
+.high-contrast a {
+  color: #0000EE !important;
+  text-decoration: underline !important;
+}
+
+.high-contrast a:visited {
+  color: #551A8B !important;
+}
+
+.high-contrast a:hover,
+.high-contrast a:focus {
+  color: #0000CC !important;
+  background-color: #FFFF99 !important;
+}
+
+/* 高コントラストモードでの入力フィールド */
+.high-contrast input[type="text"],
+.high-contrast input[type="email"],
+.high-contrast input[type="password"],
+.high-contrast textarea,
+.high-contrast select {
+  border: 2px solid #000000 !important;
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+.high-contrast input:focus,
+.high-contrast textarea:focus,
+.high-contrast select:focus {
+  outline: 3px solid #0066CC !important;
+  outline-offset: 2px;
+}
+
+/* モーダル・ダイアログのアクセシビリティ改善 */
+[role="dialog"] {
+  position: relative;
+}
+
+[role="dialog"]:focus {
+  outline: none;
+}
+
+/* タブパネルのアクセシビリティ */
+[role="tabpanel"] {
+  outline: none;
+}
+
+[role="tabpanel"]:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+}
+
+/* 色のない状態でも情報が伝わるようにするパターン */
+.colorblind-friendly .status-success::before {
+  content: "✓ ";
+}
+
+.colorblind-friendly .status-error::before {
+  content: "✗ ";
+}
+
+.colorblind-friendly .status-warning::before {
+  content: "⚠ ";
+}
+
+.colorblind-friendly .status-info::before {
+  content: "ⓘ ";
+}
+
+/* リストマーカーの改善 */
+.colorblind-friendly ul {
+  list-style-type: none;
+}
+
+.colorblind-friendly ul li::before {
+  content: "▪ ";
+  color: inherit;
+  margin-right: 0.5em;
+}
+
+.colorblind-friendly ol {
+  counter-reset: item;
+}
+
+.colorblind-friendly ol li {
+  counter-increment: item;
+}
+
+.colorblind-friendly ol li::before {
+  content: counter(item) ". ";
+  font-weight: bold;
+  margin-right: 0.5em;
+}
+
+/* プリント時のアクセシビリティ */
+@media print {
+  .high-contrast * {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .skip-link {
+    display: none;
+  }
+}
+
+/* ダークモード対応 */
+@media (prefers-color-scheme: dark) {
+  .high-contrast {
+    --text-primary: #ffffff !important;
+    --text-secondary: #cccccc !important;
+    --bg-primary: #000000 !important;
+    --bg-secondary: #1a1a1a !important;
+    --border-primary: #ffffff !important;
+    --focus-ring: #66aaff !important;
+  }
+}
+
+/* システムの高コントラスト設定に対応 */
+@media (prefers-contrast: high) {
+  :root {
+    --text-primary: #000000;
+    --text-secondary: #333333;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f5;
+    --border-primary: #000000;
+    --focus-ring: #0066cc;
+  }
+}
+
+/* システムのモーション設定に対応 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

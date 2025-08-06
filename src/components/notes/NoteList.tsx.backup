@@ -1,0 +1,291 @@
+import React, { useMemo, useCallback, memo } from 'react';
+import { Plus, List, Grid, Star, Pin } from 'lucide-react';
+import NoteCard from './NoteCard';
+import VirtualizedList from '../ui/VirtualizedList';
+import ResizeHandle from '../ui/ResizeHandle';
+import { Note } from '../../types';
+import { useNotebookStore } from '../../store/useNotebookStore';
+import { useNoteListResize } from '../../hooks/useNoteListResize';
+
+interface NoteListProps {
+  className?: string;
+  onNoteSelect?: () => void;
+}
+
+const NoteList: React.FC<NoteListProps> = memo(({ className = '', onNoteSelect }) => {
+  const {
+    selectedNotebook,
+    selectedSubFolder,
+    selectedNote,
+    searchQuery,
+    selectedTags,
+    viewMode,
+    notesData,
+    subFoldersData,
+    setSelectedNote,
+    setViewMode,
+    updateNote,
+    addNoteToSubFolder,
+    deleteNote
+  } = useNotebookStore();
+
+  const { noteListWidth, updateNoteListWidth, minWidth, maxWidth } = useNoteListResize();
+
+  const notes = useMemo(() => {
+    return notesData[selectedSubFolder] || [];
+  }, [notesData, selectedSubFolder]);
+
+  const filteredNotes = useMemo(() => {
+    return notes.filter(note => {
+      const matchesSearch = searchQuery === '' || 
+        note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        note.pages.some(page => 
+          page.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          page.content.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+
+      const matchesTags = selectedTags.length === 0 || 
+        selectedTags.every(tag => note.tags.includes(tag));
+
+      return matchesSearch && matchesTags;
+    });
+  }, [notes, searchQuery, selectedTags]);
+
+  const sortedNotes = useMemo(() => {
+    return [...filteredNotes].sort((a, b) => {
+      // ピン留めされたノートを最初に
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      
+      // 更新日時で降順ソート
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+  }, [filteredNotes]);
+
+  const handleNoteClick = useCallback((note: Note) => {
+    setSelectedNote(note);
+    onNoteSelect?.();
+  }, [setSelectedNote, onNoteSelect]);
+
+  const handleToggleFavorite = useCallback((noteId: number) => {
+    const note = notes.find(n => n.id === noteId);
+    if (note) {
+      updateNote(noteId, { isFavorite: !note.isFavorite });
+    }
+  }, [notes, updateNote]);
+
+  const handleTogglePin = useCallback((noteId: number) => {
+    const note = notes.find(n => n.id === noteId);
+    if (note) {
+      updateNote(noteId, { isPinned: !note.isPinned });
+    }
+  }, [notes, updateNote]);
+
+  const handleDelete = useCallback((noteId: number) => {
+    if (window.confirm('このノートを削除しますか？')) {
+      deleteNote(noteId);
+      if (selectedNote?.id === noteId) {
+        setSelectedNote(null);
+      }
+    }
+  }, [deleteNote, selectedNote, setSelectedNote]);
+
+  const handleAddNote = useCallback(() => {
+    if (!selectedSubFolder) return;
+    
+    addNoteToSubFolder(selectedSubFolder);
+  }, [selectedSubFolder, addNoteToSubFolder]);
+
+  const pinnedNotes = useMemo(() => sortedNotes.filter(note => note.isPinned), [sortedNotes]);
+  const favoriteNotes = useMemo(() => sortedNotes.filter(note => note.isFavorite && !note.isPinned), [sortedNotes]);
+  const regularNotes = useMemo(() => sortedNotes.filter(note => !note.isPinned && !note.isFavorite), [sortedNotes]);
+
+  return (
+    <div 
+      className={`bg-white border-r border-gray-200 flex h-screen ${className}`}
+      style={{ width: noteListWidth }}
+    >
+      <div className="flex-1 flex flex-col">
+        {/* ヘッダー */}
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">
+              {(() => {
+                if (!selectedSubFolder) return 'ノート';
+                const subFolder = subFoldersData[selectedNotebook]?.find(sf => sf.id === selectedSubFolder);
+                return subFolder ? `${subFolder.name} (${notes.length})` : `ノート (${notes.length})`;
+              })()}
+            </h2>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handleAddNote}
+                className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
+                title="新しいノートを追加"
+              >
+                <Plus size={20} />
+              </button>
+              <div className="flex bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-1 rounded transition-colors ${
+                    viewMode === 'list' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
+                  }`}
+                >
+                  <List size={16} />
+                </button>
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1 rounded transition-colors ${
+                    viewMode === 'grid' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
+                  }`}
+                >
+                  <Grid size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* フィルター情報 */}
+          {(searchQuery || selectedTags.length > 0) && (
+            <div className="text-sm text-gray-600">
+              {filteredNotes.length} 件のノートが見つかりました
+              {searchQuery && (
+                <span className="ml-2 text-blue-600">
+                  検索: "{searchQuery}"
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ノートリスト */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {sortedNotes.length === 0 ? (
+          <div className="text-center text-gray-500 py-8">
+            {notes.length === 0 ? (
+              <div>
+                <p className="mb-4">まだノートがありません</p>
+                <button
+                  onClick={handleAddNote}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  最初のノートを作成
+                </button>
+              </div>
+            ) : (
+              <p>条件に一致するノートが見つかりませんでした</p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* ピン留めされたノート */}
+            {pinnedNotes.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                  <Pin size={14} className="mr-1" />
+                  ピン留め
+                </h3>
+                <div className="space-y-2">
+                  {pinnedNotes.map(note => (
+                    <NoteCard
+                      key={note.id}
+                      note={note}
+                      isSelected={selectedNote?.id === note.id}
+                      onClick={() => handleNoteClick(note)}
+                      onToggleFavorite={handleToggleFavorite}
+                      onTogglePin={handleTogglePin}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* お気に入りのノート */}
+            {favoriteNotes.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                  <Star size={14} className="mr-1" />
+                  お気に入り
+                </h3>
+                <div className="space-y-2">
+                  {favoriteNotes.map(note => (
+                    <NoteCard
+                      key={note.id}
+                      note={note}
+                      isSelected={selectedNote?.id === note.id}
+                      onClick={() => handleNoteClick(note)}
+                      onToggleFavorite={handleToggleFavorite}
+                      onTogglePin={handleTogglePin}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 通常のノート（仮想化対応） */}
+            {regularNotes.length > 0 && (
+              <div>
+                {(pinnedNotes.length > 0 || favoriteNotes.length > 0) && (
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">
+                    その他のノート
+                  </h3>
+                )}
+                {/* 30件以上の場合は仮想化リストを使用 */}
+                {regularNotes.length > 30 ? (
+                  <div className="h-96">
+                    <VirtualizedList
+                      items={regularNotes}
+                      itemHeight={120}
+                      containerHeight={384} // h-96 = 384px
+                      renderItem={(note: Note) => (
+                        <div className="mb-2">
+                          <NoteCard
+                            key={note.id}
+                            note={note}
+                            isSelected={selectedNote?.id === note.id}
+                            onClick={() => handleNoteClick(note)}
+                            onToggleFavorite={handleToggleFavorite}
+                            onTogglePin={handleTogglePin}
+                            onDelete={handleDelete}
+                          />
+                        </div>
+                      )}
+                      getItemKey={(note: Note) => note.id.toString()}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {regularNotes.map(note => (
+                      <NoteCard
+                        key={note.id}
+                        note={note}
+                        isSelected={selectedNote?.id === note.id}
+                        onClick={() => handleNoteClick(note)}
+                        onToggleFavorite={handleToggleFavorite}
+                        onTogglePin={handleTogglePin}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      
+      {/* リサイズハンドル */}
+      <ResizeHandle
+        onResize={updateNoteListWidth}
+        minWidth={minWidth}
+        maxWidth={maxWidth}
+      />
+    </div>
+  );
+});
+
+NoteList.displayName = 'NoteList';
+
+export default NoteList;

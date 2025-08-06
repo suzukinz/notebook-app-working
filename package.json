@@ -1,0 +1,152 @@
+{
+  "name": "notebook-app",
+  "version": "1.0.1",
+  "private": true,
+  "main": "electron.js",
+  "homepage": "./",
+  "description": "A powerful hierarchical note-taking application with mind mapping",
+  "author": "NoteSpace Team",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.53.0",
+    "@types/katex": "^0.16.7",
+    "@uiw/react-md-editor": "^4.0.8",
+    "fast-json-patch": "^3.1.1",
+    "highlight.js": "^11.11.1",
+    "katex": "^0.16.22",
+    "lucide-react": "^0.263.1",
+    "nanoid": "^5.1.5",
+    "qrcode": "^1.5.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^6.15.0",
+    "react-scripts": "5.0.1",
+    "rehype-highlight": "^7.0.2",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "typescript": "^4.9.5",
+    "zustand": "^4.4.1"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "start:mobile": "cross-env HOST=0.0.0.0 PORT=3003 react-scripts start",
+    "build": "react-scripts build",
+    "build:analyze": "npm run build && npx serve -s build",
+    "test": "react-scripts test",
+    "test:coverage": "react-scripts test --coverage --watchAll=false",
+    "test:ci": "react-scripts test --coverage --watchAll=false --testResultsProcessor=jest-sonar-reporter",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:all": "npm run test:coverage && npm run test:e2e",
+    "eject": "react-scripts eject",
+    "electron": "electron .",
+    "electron-dev": "concurrently \"npm start\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron-pack": "npm run build && electron-builder",
+    "electron-simple": "node build-electron-simple.js",
+    "preelectron-pack": "npm run build",
+    "lint": "eslint src --ext .ts,.tsx --fix",
+    "type-check": "tsc --noEmit",
+    "pre-commit": "npm run lint && npm run type-check"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "jest": {
+    "collectCoverageFrom": [
+      "src/**/*.{js,jsx,ts,tsx}",
+      "!src/**/*.d.ts",
+      "!src/index.tsx",
+      "!src/reportWebVitals.ts",
+      "!src/setupTests.ts"
+    ],
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 70,
+        "functions": 70,
+        "lines": 70,
+        "statements": 70
+      }
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^16.18.46",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18.2.21",
+    "@types/react-dom": "^18.2.7",
+    "autoprefixer": "^10.4.14",
+    "concurrently": "^7.6.0",
+    "cross-env": "^10.0.0",
+    "electron": "^22.3.27",
+    "electron-builder": "^24.13.3",
+    "electron-is-dev": "^2.0.0",
+    "postcss": "^8.4.27",
+    "tailwindcss": "^3.3.3",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.notespace.app",
+    "productName": "NoteSpace",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "build/**/*",
+      "public/electron.js",
+      "public/preload.js",
+      "node_modules/**/*"
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "forceCodeSigning": false,
+    "nodeGypRebuild": false,
+    "buildDependenciesFromSource": false,
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "target": "dir"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
+  }
+}

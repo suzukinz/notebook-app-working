@@ -1,0 +1,1362 @@
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { X, ZoomIn, ZoomOut, RotateCcw, ChevronLeft, Edit3, Star, Pin, Eye, Save } from 'lucide-react';
+import { useNotebookStore } from '../../store/useNotebookStore';
+import { MindMapNode, MindMapConnection, NodePosition } from '../../types';
+import { logger } from '../../utils/logger';
+
+interface MindMapProps {
+  className?: string;
+}
+
+const MindMap: React.FC<MindMapProps> = ({ className = '' }) => {
+  const {
+    showMindMap,
+    selectedWorkspace,
+    selectedNotebook,
+    selectedSubFolder,
+    mindMapZoom,
+    mindMapLevel,
+    mindMapHistory,
+    previewNote,
+    previewPage,
+    previewEditableTitle,
+    previewEditablePageTitle,
+    previewEditableContent,
+    notesData,
+    subFoldersData,
+    workspaces,
+    notebooks,
+    setShowMindMap,
+    setMindMapZoom,
+    setMindMapLevel,
+    setMindMapFocus,
+    setPreviewNote,
+    setPreviewPage,
+    setPreviewEditableTitle,
+    setPreviewEditablePageTitle,
+    setPreviewEditableContent,
+    setSelectedNote,
+    setCurrentPage,
+    setSelectedNotebook,
+    setSelectedSubFolder
+  } = useNotebookStore();
+
+  const [viewOffset, setViewOffset] = useState({ x: 0, y: 0 });
+  const [isPreviewEditing, setIsPreviewEditing] = useState(false);
+  const previewTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [draggedNode, setDraggedNode] = useState<MindMapNode | null>(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [nodePositions, setNodePositions] = useState<Record<string, NodePosition>>({});
+  const nodePositionsRef = useRef(nodePositions);
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [clickRipple, setClickRipple] = useState<{x: number, y: number, nodeId: string} | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [lockedNodes, setLockedNodes] = useState<Set<string>>(new Set());
+  
+  // ビューポート最適化用の状態
+  const [viewportBounds] = useState({
+    left: -200, right: 1600, top: -200, bottom: 1000
+  });
+  
+  // 階層レイアウト設定（useMemoでメモ化して依存関係を安定化）
+  const layoutConfig = useMemo(() => ({
+    center: { x: 700, y: 400 },
+    layers: {
+      workspace: { radius: 0, angleOffset: 0, nodeRadius: 35 },
+      notebook: { radius: 180, angleOffset: 0, nodeRadius: 25 },
+      subfolder: { radius: 120, angleOffset: 15, nodeRadius: 18 },
+      note: { radius: 90, angleOffset: 8, nodeRadius: 12 }
+    },
+    spacing: {
+      minAngle: 20, // 最小角度間隔（度）
+      radiusIncrement: 40, // 半径の増分
+      optimalDistance: 60 // ノード間の理想距離
+    }
+  }), []);
+
+  // スプリングベースフォースレイアウトアルゴリズム（ドラッグ中は無効）
+  const adjustNodePositions = useCallback((nodes: MindMapNode[]) => {
+    // ドラッグ中は位置調整をしない
+    if (isDragging || draggedNode) {
+      return;
+    }
+    
+    const adjustedNodes = [...nodes];
+    const iterations = 6; // 軽量化のためさらに減らす
+    let newPositions = { ...nodePositionsRef.current };
+    let velocities: Record<string, NodePosition> = {};
+    
+    // 速度を初期化
+    adjustedNodes.forEach(node => {
+      if (!velocities[node.id]) {
+        velocities[node.id] = { x: 0, y: 0 };
+      }
+    });
+    
+    for (let iter = 0; iter < iterations; iter++) {
+      const forces: Record<string, NodePosition> = {};
+      
+      // 各ノードに対して力を初期化
+      adjustedNodes.forEach(node => {
+        forces[node.id] = { x: 0, y: 0 };
+      });
+      
+      // スプリング反発力の計算（ノード間の衝突回避）
+      for (let i = 0; i < adjustedNodes.length; i++) {
+        for (let j = i + 1; j < adjustedNodes.length; j++) {
+          const node1 = adjustedNodes[i];
+          const node2 = adjustedNodes[j];
+          
+          const pos1 = newPositions[node1.id] || { x: node1.x, y: node1.y };
+          const pos2 = newPositions[node2.id] || { x: node2.x, y: node2.y };
+          
+          const optimalDistance = (node1.radius || 20) + (node2.radius || 20) + 40;
+          
+          const dx = pos2.x - pos1.x;
+          const dy = pos2.y - pos1.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance > 0) {
+            // スプリング力の計算 F = k * (distance - optimalLength)
+            const springConstant = 0.1;
+            const springForce = springConstant * (distance - optimalDistance);
+            const angle = Math.atan2(dy, dx);
+            
+            // Spring force components (used in conditional logic below)
+            // const forceX = Math.cos(angle) * springForce;
+            // const forceY = Math.sin(angle) * springForce;
+            
+            // 距離が最適値より短い場合は反発力
+            if (distance < optimalDistance) {
+              const repulsionForce = Math.pow(optimalDistance / distance, 2) * 2;
+              
+              if (forces[node1.id]) {
+                forces[node1.id].x -= Math.cos(angle) * repulsionForce;
+                forces[node1.id].y -= Math.sin(angle) * repulsionForce;
+              }
+              if (forces[node2.id]) {
+                forces[node2.id].x += Math.cos(angle) * repulsionForce;
+                forces[node2.id].y += Math.sin(angle) * repulsionForce;
+              }
+            } else {
+              // 距離が最適値より長い場合は引力
+              const attractionForce = springForce * 0.3;
+              
+              if (forces[node1.id]) {
+                forces[node1.id].x += Math.cos(angle) * attractionForce;
+                forces[node1.id].y += Math.sin(angle) * attractionForce;
+              }
+              if (forces[node2.id]) {
+                forces[node2.id].x -= Math.cos(angle) * attractionForce;
+                forces[node2.id].y -= Math.sin(angle) * attractionForce;
+              }
+            }
+          }
+        }
+      }
+      
+      // 階層中心への引力（親ノードへの引力）
+      // eslint-disable-next-line no-loop-func
+      adjustedNodes.forEach(node => {
+        if (node.type !== 'workspace') {
+          const pos = newPositions[node.id] || { x: node.x, y: node.y };
+          let centerX = layoutConfig.center.x;
+          let centerY = layoutConfig.center.y;
+          
+          // 各階層レベルに応じた親ノードを特定
+          if (node.type === 'note' && selectedSubFolder) {
+            const parentSubfolder = adjustedNodes.find(n => n.id === selectedSubFolder);
+            if (parentSubfolder) {
+              const parentPos = newPositions[parentSubfolder.id] || { x: parentSubfolder.x, y: parentSubfolder.y };
+              centerX = parentPos.x;
+              centerY = parentPos.y;
+            }
+          } else if (node.type === 'subfolder' && selectedNotebook) {
+            const parentNotebook = adjustedNodes.find(n => n.id === selectedNotebook);
+            if (parentNotebook) {
+              const parentPos = newPositions[parentNotebook.id] || { x: parentNotebook.x, y: parentNotebook.y };
+              centerX = parentPos.x;
+              centerY = parentPos.y;
+            }
+          }
+          
+          const dx = centerX - pos.x;
+          const dy = centerY - pos.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance > 0 && forces[node.id]) {
+            const hierarchicalForce = 0.01 * (1 + (node.depth || 1) * 0.005);
+            forces[node.id].x += dx * hierarchicalForce;
+            forces[node.id].y += dy * hierarchicalForce;
+          }
+        }
+      });
+      
+      // 位置と速度を更新（物理学的な動きを実現）（ロックされたノードは除外）
+      // eslint-disable-next-line no-loop-func
+      adjustedNodes.forEach(node => {
+        if (node.type !== 'workspace' && forces[node.id] && !lockedNodes.has(node.id)) {
+          const pos = newPositions[node.id] || { x: node.x, y: node.y };
+          // const velocity = velocities[node.id] || { x: 0, y: 0 };
+          
+          // 簡略化された位置更新
+          const damping = 0.6; // さらに減衰させて微細な動きに
+          
+          newPositions = {
+            ...newPositions,
+            [node.id]: {
+              x: pos.x + forces[node.id].x * damping,
+              y: pos.y + forces[node.id].y * damping
+            }
+          };
+        }
+      });
+    }
+    
+    setNodePositions(newPositions);
+  }, [isDragging, draggedNode, lockedNodes, selectedSubFolder, selectedNotebook, layoutConfig.center]);
+
+  useEffect(() => {
+    nodePositionsRef.current = nodePositions;
+  }, [nodePositions]);
+
+  // 円形配置での角度計算（重なりを防ぐ）
+  const calculateOptimalAngles = useCallback((count: number, minAngle: number = 20) => {
+    if (count === 0) return [];
+    if (count === 1) return [0];
+    
+    const totalAngle = 360;
+    const requiredAngle = Math.max(minAngle * count, totalAngle / count);
+    const actualSpacing = requiredAngle > totalAngle ? totalAngle / count : requiredAngle;
+    
+    return Array.from({ length: count }, (_, i) => {
+      return (i * actualSpacing) % 360;
+    });
+  }, []);
+
+  // ノード位置の最適化
+  const optimizeNodePosition = useCallback((baseX: number, baseY: number, radius: number, angle: number, avoidNodes: any[] = []) => {
+    let x = baseX + Math.cos((angle * Math.PI) / 180) * radius;
+    let y = baseY + Math.sin((angle * Math.PI) / 180) * radius;
+    
+    // 他のノードとの重なりをチェックして調整
+    for (const node of avoidNodes) {
+      const distance = Math.sqrt((x - node.x) ** 2 + (y - node.y) ** 2);
+      const minDistance = (radius + (node.radius || 20)) / 2 + 30;
+      
+      if (distance < minDistance) {
+        // 重なりがある場合、少し外側に移動
+        const adjustAngle = Math.atan2(y - node.y, x - node.x);
+        x = node.x + Math.cos(adjustAngle) * minDistance;
+        y = node.y + Math.sin(adjustAngle) * minDistance;
+      }
+    }
+    
+    return { x, y };
+  }, []);
+
+
+  // ノードデータ生成（メモ化してパフォーマンス向上）
+  const mindMapData = useMemo(() => {
+    logger.log('Regenerating mind map data. Selected subfolder:', selectedSubFolder);
+    
+    // マインドマップデータを直接生成
+    logger.log('=== Mind Map Data Generation ===');
+    logger.log('Current state:', {
+      selectedWorkspace,
+      selectedNotebook, 
+      selectedSubFolder,
+      notebooksCount: Object.keys(notebooks).length,
+      subFoldersCount: Object.keys(subFoldersData).length,
+      notesCount: Object.keys(notesData).length
+    });
+    
+    const nodes: MindMapNode[] = [];
+    const connections: MindMapConnection[] = [];
+    const relationConnections: MindMapConnection[] = [];
+    
+    // 中心にワークスペース
+    const workspace = workspaces.find(w => w.id === selectedWorkspace);
+    if (workspace) {
+      nodes.push({
+        id: workspace.id,
+        type: 'workspace',
+        x: layoutConfig.center.x,
+        y: layoutConfig.center.y,
+        radius: layoutConfig.layers.workspace.nodeRadius,
+        color: workspace.color,
+        isActive: true,
+        tooltip: `${workspace.icon} ${workspace.name}`,
+        depth: 0
+      });
+
+      // 全てのノートブックを表示
+      const currentNotebooks = notebooks[selectedWorkspace] || [];
+      const notebookAngles = calculateOptimalAngles(currentNotebooks.length, layoutConfig.spacing.minAngle);
+      const notebookRadius = currentNotebooks.length <= 3 ? layoutConfig.layers.notebook.radius : 
+                           layoutConfig.layers.notebook.radius + (currentNotebooks.length - 3) * 20;
+      
+      currentNotebooks.forEach((notebook, index) => {
+        const angle = notebookAngles[index];
+        const position = optimizeNodePosition(
+          layoutConfig.center.x, 
+          layoutConfig.center.y, 
+          notebookRadius, 
+          angle, 
+          nodes
+        );
+        const notebookX = position.x;
+        const notebookY = position.y;
+        
+        nodes.push({
+          id: notebook.id,
+          type: 'notebook',
+          x: notebookX,
+          y: notebookY,
+          radius: layoutConfig.layers.notebook.nodeRadius,
+          color: notebook.color,
+          clickable: true,
+          isActive: selectedNotebook === notebook.id,
+          tooltip: `📚 ${notebook.name} (${notebook.count}ノート)`,
+          depth: 1
+        });
+
+        connections.push({
+          from: { x: layoutConfig.center.x, y: layoutConfig.center.y, nodeId: workspace.id },
+          to: { x: notebookX, y: notebookY, nodeId: notebook.id },
+          key: `workspace-${notebook.id}`,
+          type: 'hierarchy',
+          depth: 1
+        });
+
+        // 選択中のノートブックのサブフォルダを表示
+        if (selectedNotebook === notebook.id) {
+          const subFolders = subFoldersData[notebook.id] || [];
+          logger.log(`Notebook ${notebook.id} selected. Subfolders:`, subFolders.length, 'Selected subfolder:', selectedSubFolder);
+          const subFolderAngles = calculateOptimalAngles(subFolders.length, layoutConfig.spacing.minAngle);
+          const baseSubFolderRadius = layoutConfig.layers.subfolder.radius;
+          
+          subFolders.forEach((subFolder: any, sfIndex: number) => {
+            const subAngle = subFolderAngles[sfIndex] + layoutConfig.layers.subfolder.angleOffset;
+            const position = optimizeNodePosition(
+              notebookX, 
+              notebookY, 
+              baseSubFolderRadius, 
+              subAngle, 
+              nodes
+            );
+            const subFolderX = position.x;
+            const subFolderY = position.y;
+            
+            nodes.push({
+              id: subFolder.id,
+              type: 'subfolder',
+              x: subFolderX,
+              y: subFolderY,
+              radius: layoutConfig.layers.subfolder.nodeRadius,
+              color: subFolder.color,
+              clickable: true,
+              isActive: selectedSubFolder === subFolder.id,
+              tooltip: `📁 ${subFolder.name} (${subFolder.count}ノート)`,
+              depth: 2
+            });
+
+            connections.push({
+              from: { x: notebookX, y: notebookY, nodeId: notebook.id },
+              to: { x: subFolderX, y: subFolderY, nodeId: subFolder.id },
+              key: `notebook-${subFolder.id}`,
+              type: 'hierarchy'
+            });
+
+            // 選択中のサブフォルダのノートを表示
+            if (selectedSubFolder === subFolder.id) {
+              const notes = notesData[subFolder.id] || [];
+              logger.log(`Displaying notes for subfolder ${subFolder.id}:`, notes.length, 'notes');
+              const displayNotes = notes.slice(0, 8);
+              const noteAngles = calculateOptimalAngles(displayNotes.length, layoutConfig.spacing.minAngle);
+              const baseNoteRadius = layoutConfig.layers.note.radius;
+              
+              displayNotes.forEach((note: any, noteIndex: number) => {
+                const noteAngle = noteAngles[noteIndex] + layoutConfig.layers.note.angleOffset;
+                const position = optimizeNodePosition(
+                  subFolderX, 
+                  subFolderY, 
+                  baseNoteRadius, 
+                  noteAngle, 
+                  nodes
+                );
+                const noteX = position.x;
+                const noteY = position.y;
+                
+                nodes.push({
+                  id: note.id,
+                  type: 'note',
+                  x: noteX,
+                  y: noteY,
+                  radius: layoutConfig.layers.note.nodeRadius,
+                  color: note.isPinned ? 'orange' : (note.isFavorite ? 'yellow' : 'white'),
+                  clickable: true,
+                  isPinned: note.isPinned,
+                  isFavorite: note.isFavorite,
+                  note: note,
+                  isActive: previewNote?.id === note.id,
+                  tooltip: `${note.isPinned ? '📌' : '📄'} ${note.title} (${note.pages.length}p)`,
+                  depth: 3
+                });
+
+                connections.push({
+                  from: { x: subFolderX, y: subFolderY, nodeId: subFolder.id },
+                  to: { x: noteX, y: noteY, nodeId: note.id },
+                  key: `subfolder-${note.id}`,
+                  type: 'hierarchy'
+                });
+              });
+
+              // 残りのノートがある場合は「...」を表示
+              if (notes.length > 8) {
+                const moreAngle = noteAngles[noteAngles.length - 1] + 30;
+                const position = optimizeNodePosition(
+                  subFolderX, 
+                  subFolderY, 
+                  baseNoteRadius + 20, 
+                  moreAngle, 
+                  nodes
+                );
+                
+                nodes.push({
+                  id: 'more',
+                  type: 'more',
+                  x: position.x,
+                  y: position.y,
+                  radius: 10,
+                  color: 'gray',
+                  clickable: true,
+                  isActive: false,
+                  tooltip: `+${notes.length - 8}個のノート`,
+                  depth: 3
+                });
+              }
+            }
+          });
+        }
+      });
+    }
+    
+    return { nodes, connections, relationConnections };
+  }, [
+    selectedWorkspace, selectedNotebook, selectedSubFolder, previewNote, 
+    workspaces, notebooks, notesData, subFoldersData, layoutConfig,
+    calculateOptimalAngles, optimizeNodePosition
+  ]);
+  const { nodes, connections, relationConnections } = mindMapData;
+  
+  // ビューポート内のノードをフィルタリング
+  const visibleNodes = useMemo(() => {
+    return nodes.filter(node => {
+      const pos = nodePositions[node.id] || { x: node.x, y: node.y };
+      const margin = (node.radius || 20) + 50; // マージンを考慮
+      
+      return pos.x + margin > viewportBounds.left && 
+             pos.x - margin < viewportBounds.right &&
+             pos.y + margin > viewportBounds.top && 
+             pos.y - margin < viewportBounds.bottom;
+    });
+  }, [nodes, nodePositions, viewportBounds]);
+  
+  // ビューポート内の接続線をフィルタリング
+  const visibleConnections = useMemo(() => {
+    const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
+    return connections.filter(conn => 
+      visibleNodeIds.has(conn.from.nodeId) || visibleNodeIds.has(conn.to.nodeId)
+    );
+  }, [connections, visibleNodes]);
+  
+  const visibleRelationConnections = useMemo(() => {
+    const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
+    return relationConnections.filter(conn => 
+      visibleNodeIds.has(conn.from.nodeId) && visibleNodeIds.has(conn.to.nodeId)
+    );
+  }, [relationConnections, visibleNodes]);
+
+  // ノード生成後に重なりを調整
+  useEffect(() => {
+    if (nodes.length > 0) {
+      const timer = setTimeout(() => {
+        adjustNodePositions(nodes);
+      }, 100); // 少し遅延させて安定させる
+      
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes.length]);
+  
+  // ドラッグ終了時に重なりを再調整
+  useEffect(() => {
+    if (!draggedNode && nodes.length > 0) {
+      const timer = setTimeout(() => {
+        adjustNodePositions(nodes);
+      }, 200);
+      
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draggedNode]);
+  
+  // リップルエフェクトの処理
+  useEffect(() => {
+    if (clickRipple) {
+      const timer = setTimeout(() => {
+        setClickRipple(null);
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [clickRipple]);
+
+  // 早期リターンのチェック（全てのHooksの後で）
+  if (!showMindMap) return null;
+
+  const handleZoomIn = () => {
+    setMindMapZoom(Math.min(mindMapZoom + 0.1, 2));
+  };
+
+  const handleZoomOut = () => {
+    setMindMapZoom(Math.max(mindMapZoom - 0.1, 0.5));
+  };
+
+  const handleReset = () => {
+    setMindMapZoom(1);
+    setViewOffset({ x: 0, y: 0 });
+    setMindMapFocus(null);
+    setNodePositions({}); // ノード位置をリセット
+  };
+
+  const handleNodeClick = (node: any, event?: React.MouseEvent) => {
+    if (!node.clickable) return;
+
+    // リップルエフェクトを発生
+    if (event) {
+      const currentPos = nodePositions[node.id] || { x: node.x, y: node.y };
+      setClickRipple({ x: currentPos.x, y: currentPos.y, nodeId: node.id });
+    }
+
+    switch (node.type) {
+      case 'notebook':
+        // ノートブックを選択
+        logger.log('Notebook clicked:', node.id);
+        setSelectedNotebook(node.id);
+        break;
+      case 'subfolder':
+        // サブフォルダを選択
+        logger.log('Subfolder clicked:', node.id, 'Current selected:', selectedSubFolder);
+        setSelectedSubFolder(node.id);
+        
+        // ノード位置のリセットを削除して、スムーズなアニメーションを維持
+        // setNodePositions({});
+        
+        // ドラッグ中でない場合のみ再調整を実行
+        if (!isDragging) {
+          setTimeout(() => {
+            // mindMapDataは既にuseMemoで生成されているため、直接ノードを使用
+            if (nodes.length > 0) {
+              adjustNodePositions(nodes);
+            }
+          }, 100); // 遅延も短縮してより自然に
+        }
+        break;
+      case 'note':
+        // ノートをプレビューパネルに表示
+        setPreviewNote(node.note);
+        setPreviewPage(0);
+        setPreviewEditableTitle(node.note.title);
+        setPreviewEditablePageTitle(node.note.pages[0]?.title || '');
+        setPreviewEditableContent(node.note.pages[0]?.content || '');
+        break;
+      case 'page':
+        setPreviewNote(node.note);
+        const pageIndex = node.note.pages.findIndex((p: any) => p.id === node.id);
+        setPreviewPage(pageIndex);
+        setPreviewEditableTitle(node.note.title);
+        setPreviewEditablePageTitle(node.page.title);
+        setPreviewEditableContent(node.page.content);
+        break;
+      case 'more':
+        // 何もしない（表示のみ）
+        break;
+    }
+  };
+
+  const handleGoBack = () => {
+    if (mindMapHistory.length > 0) {
+      const lastHistory = JSON.parse(mindMapHistory[mindMapHistory.length - 1]);
+      setMindMapLevel(lastHistory.level);
+      setMindMapFocus(lastHistory.focus);
+      // Remove last item from history
+      const newHistory = mindMapHistory.slice(0, -1);
+      useNotebookStore.setState({ mindMapHistory: newHistory });
+    }
+  };
+
+  const openInMainEditor = () => {
+    if (previewNote) {
+      setSelectedNote(previewNote);
+      setCurrentPage(previewPage);
+      setShowMindMap(false);
+    }
+  };
+
+  const handlePreviewSave = () => {
+    if (!previewNote) return;
+
+    const updatedPages = [...previewNote.pages];
+    updatedPages[previewPage] = {
+      ...updatedPages[previewPage],
+      title: previewEditablePageTitle,
+      content: previewEditableContent
+    };
+
+    const updatedNote = {
+      ...previewNote,
+      title: previewEditableTitle,
+      pages: updatedPages,
+      updatedAt: new Date().toISOString().split('T')[0]
+    };
+
+    const { updateNote } = useNotebookStore.getState();
+    updateNote(previewNote.id, updatedNote);
+
+    // プレビューノートも更新
+    setPreviewNote(updatedNote);
+
+    setHasUnsavedChanges(false);
+    setIsPreviewEditing(false);
+  };
+
+
+  const handlePreviewContentChange = (content: string) => {
+    setPreviewEditableContent(content);
+    setHasUnsavedChanges(true);
+  };
+
+  const handlePreviewTitleChange = (title: string) => {
+    setPreviewEditableTitle(title);
+    setHasUnsavedChanges(true);
+  };
+
+  const handlePreviewPageTitleChange = (title: string) => {
+    setPreviewEditablePageTitle(title);
+    setHasUnsavedChanges(true);
+  };
+
+  // ドラッグ処理
+  const handleMouseDown = (e: React.MouseEvent, node: any) => {
+    if (!node.clickable) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // const rect = e.currentTarget.getBoundingClientRect();
+    const svg = e.currentTarget.closest('svg');
+    if (!svg) return;
+    
+    const svgRect = svg.getBoundingClientRect();
+    const currentPos = nodePositions[node.id] || { x: node.x, y: node.y };
+    
+    setDraggedNode(node);
+    setIsDragging(true);
+    
+    // ドラッグ中のノードを一時的にロック
+    setLockedNodes((prev: Set<string>) => {
+      const newSet = new Set(prev);
+      newSet.add(node.id);
+      return newSet;
+    });
+    
+    setDragOffset({
+      x: e.clientX - svgRect.left - currentPos.x,
+      y: e.clientY - svgRect.top - currentPos.y
+    });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!draggedNode) return;
+    
+    e.preventDefault();
+    const svg = e.currentTarget.closest('svg');
+    if (!svg) return;
+    
+    const svgRect = svg.getBoundingClientRect();
+    const newX = e.clientX - svgRect.left - dragOffset.x;
+    const newY = e.clientY - svgRect.top - dragOffset.y;
+    
+    // ドラッグ中の位置を更新
+    const updatedPositions = {
+      ...nodePositions,
+      [draggedNode.id]: { x: newX, y: newY }
+    };
+    
+    // 他のノードとの重なりをチェック
+    const otherNodes = nodes.filter(node => node.id !== draggedNode.id);
+    let finalX = newX;
+    let finalY = newY;
+    
+    for (const otherNode of otherNodes) {
+      const otherPos = (updatedPositions as any)[otherNode.id] || { x: otherNode.x, y: otherNode.y };
+      const minDistance = (draggedNode.radius || 20) + (otherNode.radius || 20) + 20;
+      
+      const dx = finalX - otherPos.x;
+      const dy = finalY - otherPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance < minDistance && distance > 0) {
+        const angle = Math.atan2(dy, dx);
+        finalX = otherPos.x + Math.cos(angle) * minDistance;
+        finalY = otherPos.y + Math.sin(angle) * minDistance;
+      }
+    }
+    
+    setNodePositions(prev => ({
+      ...prev,
+      [draggedNode.id]: { x: finalX, y: finalY }
+    }));
+  };
+
+  const handleMouseUp = () => {
+    if (draggedNode) {
+      // ドラッグ終了後、少し遅延してからロックを解除
+      setTimeout(() => {
+        setLockedNodes((prev: Set<string>) => {
+          const newSet = new Set(prev);
+          newSet.delete(draggedNode.id);
+          return newSet;
+        });
+      }, 1000); // 1秒後にロック解除
+    }
+    
+    setDraggedNode(null);
+    setDragOffset({ x: 0, y: 0 });
+    setIsDragging(false);
+  };
+
+  // モダンなグラデーションカラーシステム
+  const getNodeGradient = (color: string, isActive: boolean = false) => {
+    const gradients = {
+      blue: isActive ? 'url(#blueGradientActive)' : 'url(#blueGradient)',
+      green: isActive ? 'url(#greenGradientActive)' : 'url(#greenGradient)',
+      purple: isActive ? 'url(#purpleGradientActive)' : 'url(#purpleGradient)',
+      yellow: isActive ? 'url(#yellowGradientActive)' : 'url(#yellowGradient)',
+      red: isActive ? 'url(#redGradientActive)' : 'url(#redGradient)',
+      orange: isActive ? 'url(#orangeGradientActive)' : 'url(#orangeGradient)',
+      pink: isActive ? 'url(#pinkGradientActive)' : 'url(#pinkGradient)',
+      gray: isActive ? 'url(#grayGradientActive)' : 'url(#grayGradient)',
+      white: isActive ? 'url(#whiteGradientActive)' : 'url(#whiteGradient)'
+    };
+    return gradients[color as keyof typeof gradients] || gradients.gray;
+  };
+
+  const renderMarkdown = (content: string) => {
+    // 改良されたMarkdownレンダリング（NoteEditorと統一）
+    let html = content
+      // 見出し
+      .replace(/^### (.+)$/gm, '<h3 class="text-sm font-medium text-gray-800 mt-2 mb-1">$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2 class="text-md font-semibold text-gray-800 mt-3 mb-2">$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1 class="text-lg font-bold text-gray-900 mt-4 mb-2">$1</h1>')
+      
+      // コードブロック
+      .replace(/```[\s\S]*?```/g, (match) => {
+        const code = match.replace(/```/g, '').trim();
+        return `<pre class="bg-gray-100 p-2 rounded text-xs overflow-x-auto my-2"><code class="font-mono">${code}</code></pre>`;
+      })
+      
+      // インラインコード
+      .replace(/`([^`]+)`/g, '<code class="bg-gray-100 px-1 py-0.5 rounded text-xs font-mono">$1</code>')
+      
+      // 太字・斜体・取り消し線
+      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em class="italic">$1</em>')
+      .replace(/~~(.*?)~~/g, '<del class="line-through">$1</del>')
+      
+      // リンク
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-blue-600 hover:text-blue-800 underline text-sm">$1</a>')
+      
+      // 引用
+      .replace(/^> (.+)$/gm, '<blockquote class="border-l-2 border-gray-300 pl-2 italic text-gray-700 my-1 text-sm">$1</blockquote>')
+      
+      // 水平線
+      .replace(/^---$/gm, '<hr class="border-gray-300 my-2">')
+      
+      // チェックリスト
+      .replace(/^- \[ \] (.+)$/gm, '<div class="flex items-center text-sm my-1"><input type="checkbox" class="mr-1" disabled> $1</div>')
+      .replace(/^- \[x\] (.+)$/gm, '<div class="flex items-center text-sm my-1"><input type="checkbox" class="mr-1" checked disabled> $1</div>')
+      
+      // 番号なしリスト
+      .replace(/^- (.+)$/gm, '<li class="ml-2 text-sm my-0.5">• $1</li>')
+      
+      // 番号付きリスト
+      .replace(/^\d+\. (.+)$/gm, '<li class="ml-2 text-sm my-0.5 list-decimal">$1</li>')
+      
+      // 段落
+      .replace(/\n\n/g, '</p><p class="mb-2 text-sm">')
+      .replace(/\n/g, '<br>')
+      .replace(/^/, '<p class="mb-2 text-sm">')
+      .replace(/$/, '</p>');
+
+    // リストをulで囲む
+    html = html.replace(/(<li class="ml-2 text-sm my-0.5">• .+<\/li>)/g, '<ul class="mb-2">$1</ul>');
+    html = html.replace(/(<li class="ml-2 text-sm my-0.5 list-decimal">.+<\/li>)/g, '<ol class="mb-2">$1</ol>');
+
+    return html;
+  };
+
+  return (
+    <div className={`fixed inset-0 bg-black bg-opacity-50 z-[9999] flex ${className}`}>
+      <div className="bg-white w-full h-full flex flex-col">
+        {/* ヘッダー */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="flex items-center space-x-4">
+            <h2 className="text-lg font-semibold text-gray-900">マインドマップ</h2>
+            {mindMapHistory.length > 0 && (
+              <button
+                onClick={handleGoBack}
+                className="flex items-center px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                <ChevronLeft size={16} className="mr-1" />
+                戻る
+              </button>
+            )}
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <div className="flex bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setMindMapLevel('workspace')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  mindMapLevel === 'workspace' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
+                }`}
+              >
+                ワークスペース
+              </button>
+              <button
+                onClick={() => setMindMapLevel('notebook')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  mindMapLevel === 'notebook' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
+                }`}
+              >
+                ノートブック
+              </button>
+              <button
+                onClick={() => setMindMapLevel('subfolder')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  mindMapLevel === 'subfolder' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
+                }`}
+              >
+                サブフォルダ
+              </button>
+              <button
+                onClick={() => setMindMapLevel('note')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  mindMapLevel === 'note' ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
+                }`}
+              >
+                ノート
+              </button>
+            </div>
+            
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={handleZoomOut}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ZoomOut size={16} />
+              </button>
+              <span className="text-sm text-gray-600 min-w-12 text-center">
+                {Math.round(mindMapZoom * 100)}%
+              </span>
+              <button
+                onClick={handleZoomIn}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ZoomIn size={16} />
+              </button>
+              <button
+                onClick={handleReset}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <RotateCcw size={16} />
+              </button>
+            </div>
+            
+            <button
+              onClick={() => setShowMindMap(false)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* メインコンテンツ */}
+        <div className="flex-1 flex">
+          {/* マインドマップエリア */}
+          <div className={`${previewNote ? 'w-1/2' : 'w-full'} flex flex-col relative overflow-hidden`} style={{
+            background: `
+              radial-gradient(circle at 20% 50%, rgba(120, 119, 198, 0.03) 0%, transparent 50%),
+              radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.03) 0%, transparent 50%),
+              radial-gradient(circle at 40% 80%, rgba(119, 198, 255, 0.03) 0%, transparent 50%),
+              linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)
+            `
+          }}>
+            <div className="flex-1 overflow-auto">
+              <div className="min-w-[1400px] min-h-[800px] relative">
+                <svg 
+                  width="1400" 
+                  height="800" 
+                  viewBox="0 0 1400 800"
+                  className="w-full h-full"
+                  style={{ 
+                    transform: `scale(${mindMapZoom}) translate(${viewOffset.x}px, ${viewOffset.y}px)`,
+                    transformOrigin: 'center center'
+                  }}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
+                >
+                  {/* モダングラデーション定義 */}
+                  <defs>
+                    <linearGradient id="blueGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#60a5fa" />
+                      <stop offset="100%" stopColor="#3b82f6" />
+                    </linearGradient>
+                    <linearGradient id="blueGradientActive" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#93c5fd" />
+                      <stop offset="100%" stopColor="#2563eb" />
+                    </linearGradient>
+                    
+                    <linearGradient id="greenGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#34d399" />
+                      <stop offset="100%" stopColor="#10b981" />
+                    </linearGradient>
+                    <linearGradient id="greenGradientActive" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#6ee7b7" />
+                      <stop offset="100%" stopColor="#059669" />
+                    </linearGradient>
+                    
+                    <linearGradient id="purpleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#a78bfa" />
+                      <stop offset="100%" stopColor="#8b5cf6" />
+                    </linearGradient>
+                    <linearGradient id="purpleGradientActive" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#c4b5fd" />
+                      <stop offset="100%" stopColor="#7c3aed" />
+                    </linearGradient>
+                    
+                    <linearGradient id="yellowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#fbbf24" />
+                      <stop offset="100%" stopColor="#f59e0b" />
+                    </linearGradient>
+                    <linearGradient id="yellowGradientActive" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#fcd34d" />
+                      <stop offset="100%" stopColor="#d97706" />
+                    </linearGradient>
+                    
+                    <linearGradient id="redGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#f87171" />
+                      <stop offset="100%" stopColor="#ef4444" />
+                    </linearGradient>
+                    <linearGradient id="redGradientActive" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#fca5a5" />
+                      <stop offset="100%" stopColor="#dc2626" />
+                    </linearGradient>
+                    
+                    <linearGradient id="orangeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#fb923c" />
+                      <stop offset="100%" stopColor="#f97316" />
+                    </linearGradient>
+                    <linearGradient id="orangeGradientActive" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#fdba74" />
+                      <stop offset="100%" stopColor="#ea580c" />
+                    </linearGradient>
+                    
+                    <linearGradient id="pinkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#f472b6" />
+                      <stop offset="100%" stopColor="#ec4899" />
+                    </linearGradient>
+                    <linearGradient id="pinkGradientActive" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#f9a8d4" />
+                      <stop offset="100%" stopColor="#db2777" />
+                    </linearGradient>
+                    
+                    <linearGradient id="grayGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#9ca3af" />
+                      <stop offset="100%" stopColor="#6b7280" />
+                    </linearGradient>
+                    <linearGradient id="grayGradientActive" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#d1d5db" />
+                      <stop offset="100%" stopColor="#4b5563" />
+                    </linearGradient>
+                    
+                    <linearGradient id="whiteGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#ffffff" />
+                      <stop offset="100%" stopColor="#f9fafb" />
+                    </linearGradient>
+                    <linearGradient id="whiteGradientActive" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#ffffff" />
+                      <stop offset="100%" stopColor="#e5e7eb" />
+                    </linearGradient>
+                    
+                    {/* グローエフェクト */}
+                    <filter id="glow">
+                      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                      <feMerge> 
+                        <feMergeNode in="coloredBlur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                      </feMerge>
+                    </filter>
+                    
+                    {/* モダンシャドウエフェクト */}
+                    <filter id="shadow">
+                      <feDropShadow dx="0" dy="4" stdDeviation="8" floodColor="rgba(0,0,0,0.08)"/>
+                    </filter>
+                    
+                    {/* ガラスモーフィズムエフェクト */}
+                    <filter id="glassmorphism">
+                      <feGaussianBlur stdDeviation="1" result="blur"/>
+                      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.85 0"/>
+                      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                    </filter>
+                    
+                    {/* プレミアムシャドウ */}
+                    <filter id="premiumShadow">
+                      <feDropShadow dx="0" dy="6" stdDeviation="12" floodColor="rgba(59,130,246,0.15)"/>
+                      <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="rgba(0,0,0,0.1)"/>
+                    </filter>
+                  </defs>
+                  {/* 階層接続線（ビューポート最適化） */}
+                  {visibleConnections.map((conn) => {
+                    const fromPos = nodePositions[conn.from.nodeId] || conn.from;
+                    const toPos = nodePositions[conn.to.nodeId] || conn.to;
+                    return (
+                      <line
+                        key={conn.key}
+                        x1={fromPos.x}
+                        y1={fromPos.y}
+                        x2={toPos.x}
+                        y2={toPos.y}
+                        stroke="rgba(148, 163, 184, 0.4)"
+                        strokeWidth="1.5"
+                        className="transition-all duration-500 ease-in-out"
+                        strokeDasharray="none"
+                      />
+                    );
+                  })}
+                  
+                  {/* 関連性接続線（ビューポート最適化） */}
+                  {visibleRelationConnections.map((conn) => {
+                    const strokeStyle = conn.type === 'tag' ? '#3b82f6' : 
+                                      conn.type === 'recent' ? '#10b981' : '#f59e0b';
+                    const strokeDasharray = conn.type === 'tag' ? '5,5' : 
+                                          conn.type === 'recent' ? '3,3' : '7,3';
+                    const fromPos = nodePositions[conn.from.nodeId] || conn.from;
+                    const toPos = nodePositions[conn.to.nodeId] || conn.to;
+                    return (
+                      <line
+                        key={conn.key}
+                        x1={fromPos.x}
+                        y1={fromPos.y}
+                        x2={toPos.x}
+                        y2={toPos.y}
+                        stroke={strokeStyle}
+                        strokeWidth="1.5"
+                        strokeDasharray={strokeDasharray}
+                        className="transition-all duration-500 ease-in-out"
+                        opacity="0.7"
+                        filter="url(#shadow)"
+                      />
+                    );
+                  })}
+                  
+                  {/* ノード（ビューポート最適化） */}
+                  {visibleNodes.map((node) => {
+                    const currentPos = nodePositions[node.id] || { x: node.x, y: node.y };
+                    const displayName = node.type === 'workspace' ? node.tooltip?.split(' ')[1] || '' :
+                                      node.type === 'notebook' ? node.tooltip?.split(' ')[1] || '' :
+                                      node.type === 'subfolder' ? node.tooltip?.split(' ')[1] || '' :
+                                      node.type === 'note' ? node.tooltip?.split(' ')[1] || '' :
+                                      node.type === 'more' ? 'もっと' : '';
+                    
+                    return (
+                      <g key={node.id}>
+                        {/* ガラスモーフィズムベース */}
+                        <circle
+                          cx={currentPos.x}
+                          cy={currentPos.y}
+                          r={node.radius + 2}
+                          fill="rgba(255,255,255,0.05)"
+                          stroke="rgba(255,255,255,0.2)"
+                          strokeWidth="0.5"
+                          filter="url(#glassmorphism)"
+                          className="pointer-events-none transition-all duration-300 ease-out"
+                        />
+                        
+                        {/* メインノード */}
+                        <circle
+                          cx={currentPos.x}
+                          cy={currentPos.y}
+                          r={node.radius}
+                          fill={getNodeGradient(node.color, node.isActive)}
+                          stroke={node.isActive ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.4)"}
+                          strokeWidth={node.isActive ? "2" : "1"}
+                          filter={node.isActive ? "url(#premiumShadow)" : "url(#shadow)"}
+                          className={`transition-all duration-500 ease-in-out ${node.clickable ? 'cursor-move' : ''}`}
+                          onClick={(e) => handleNodeClick(node, e)}
+                          onMouseDown={(e) => handleMouseDown(e, node)}
+                          onMouseEnter={() => setHoveredNode(node.id)}
+                          onMouseLeave={() => setHoveredNode(null)}
+                          style={{ 
+                            cursor: draggedNode?.id === node.id ? 'grabbing' : 'grab',
+                            transform: hoveredNode === node.id ? 'scale(1.05)' : 'scale(1)',
+                            filter: hoveredNode === node.id ? 
+                              (node.isActive ? 'url(#premiumShadow) brightness(1.1)' : 'url(#shadow) brightness(1.05)') :
+                              (node.isActive ? 'url(#premiumShadow)' : 'url(#shadow)')
+                          }}
+                        >
+                          {node.tooltip && (
+                            <title>{node.tooltip}</title>
+                          )}
+                        </circle>
+                        
+                        {/* モダンなノードラベル */}
+                        <text
+                          x={currentPos.x}
+                          y={currentPos.y + node.radius + 16}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          className="text-xs font-semibold pointer-events-none transition-all duration-500 ease-in-out"
+                          fontSize="10"
+                          fill={node.isActive ? '#1f2937' : '#64748b'}
+                          style={{
+                            fontFamily: 'Inter, system-ui, sans-serif',
+                            filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
+                          }}
+                        >
+                          {displayName}
+                        </text>
+                        
+                        {/* モダンなアクティブインジケーター */}
+                        {node.isActive && (
+                          <>
+                            <circle
+                              cx={currentPos.x}
+                              cy={currentPos.y}
+                              r={node.radius - 4}
+                              fill="none"
+                              stroke="rgba(255,255,255,0.8)"
+                              strokeWidth="1.5"
+                              className="pointer-events-none transition-all duration-300 ease-out"
+                            />
+                            <circle
+                              cx={currentPos.x}
+                              cy={currentPos.y}
+                              r={2}
+                              fill="rgba(255,255,255,0.9)"
+                              className="pointer-events-none transition-all duration-300 ease-out"
+                            />
+                          </>
+                        )}
+                        
+                        {/* クリックリップルエフェクト */}
+                        {clickRipple && clickRipple.nodeId === node.id && (
+                          <circle
+                            cx={clickRipple.x}
+                            cy={clickRipple.y}
+                            r={node.radius * 2}
+                            fill="none"
+                            stroke="rgba(59, 130, 246, 0.6)"
+                            strokeWidth="2"
+                            className="pointer-events-none"
+                            style={{
+                              animation: 'ripple 0.6s ease-out forwards'
+                            }}
+                          />
+                        )}
+                        
+                        {/* ピン留めマーク */}
+                        {node.isPinned && (
+                          <circle
+                            cx={currentPos.x - node.radius + 5}
+                            cy={currentPos.y - node.radius + 5}
+                            r="3"
+                            fill="#f97316"
+                            className="pointer-events-none"
+                          />
+                        )}
+                        
+                        {/* お気に入りマーク */}
+                        {node.isFavorite && (
+                          <circle
+                            cx={currentPos.x + node.radius - 5}
+                            cy={currentPos.y - node.radius + 5}
+                            r="3"
+                            fill="#fbbf24"
+                            className="pointer-events-none"
+                          />
+                        )}
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+            </div>
+          </div>
+          
+          {/* プレビューエリア */}
+          {previewNote && (
+            <div className="w-1/2 flex flex-col bg-gray-50 border-l border-gray-200">
+              <div className="p-4 border-b border-gray-200">
+                <div className="flex items-center justify-between mb-2">
+                  {isPreviewEditing ? (
+                    <input
+                      type="text"
+                      value={previewEditableTitle}
+                      onChange={(e) => handlePreviewTitleChange(e.target.value)}
+                      className="text-lg font-semibold bg-transparent border-none outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1 flex-1"
+                      placeholder="ノートタイトル"
+                    />
+                  ) : (
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {previewEditableTitle}
+                    </h3>
+                  )}
+                  <div className="flex items-center space-x-2">
+                    {previewNote.isFavorite && (
+                      <Star size={16} className="text-yellow-500" fill="currentColor" />
+                    )}
+                    {previewNote.isPinned && (
+                      <Pin size={16} className="text-orange-500" />
+                    )}
+                    
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                      <button
+                        onClick={() => setIsPreviewEditing(false)}
+                        className={`p-1 rounded transition-colors ${
+                          !isPreviewEditing ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
+                        }`}
+                        title="プレビューモード"
+                      >
+                        <Eye size={14} />
+                      </button>
+                      <button
+                        onClick={() => setIsPreviewEditing(true)}
+                        className={`p-1 rounded transition-colors ${
+                          isPreviewEditing ? 'bg-white shadow-sm' : 'hover:bg-gray-200'
+                        }`}
+                        title="編集モード"
+                      >
+                        <Edit3 size={14} />
+                      </button>
+                    </div>
+                    
+                    {hasUnsavedChanges && (
+                      <button
+                        onClick={handlePreviewSave}
+                        className="p-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors pulse"
+                        title="変更を保存"
+                      >
+                        <Save size={14} />
+                      </button>
+                    )}
+                    
+                    <button
+                      onClick={openInMainEditor}
+                      className="flex items-center px-2 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Edit3 size={12} className="mr-1" />
+                      メインエディタ
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="text-sm text-gray-600 mb-2">
+                  作成: {previewNote.createdAt} | 更新: {previewNote.updatedAt}
+                </div>
+                
+                {previewNote.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {previewNote.tags.map(tag => (
+                      <span key={tag} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                
+                {previewNote.pages.length > 1 && (
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-600">ページ:</span>
+                    {previewNote.pages.map((page, index) => (
+                      <button
+                        key={page.id}
+                        onClick={() => {
+                          setPreviewPage(index);
+                          setPreviewEditablePageTitle(page.title);
+                          setPreviewEditableContent(page.content);
+                        }}
+                        className={`px-2 py-1 text-xs rounded ${
+                          previewPage === index 
+                            ? 'bg-blue-600 text-white' 
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        {page.title}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                
+                {/* 現在のページタイトル */}
+                {isPreviewEditing && (
+                  <div className="mt-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      ページタイトル
+                    </label>
+                    <input
+                      type="text"
+                      value={previewEditablePageTitle}
+                      onChange={(e) => handlePreviewPageTitleChange(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="ページタイトル"
+                    />
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex-1 p-4 overflow-y-auto">
+                {isPreviewEditing ? (
+                  <div className="h-full flex flex-col">
+                    <textarea
+                      ref={previewTextareaRef}
+                      value={previewEditableContent}
+                      onChange={(e) => handlePreviewContentChange(e.target.value)}
+                      className="flex-1 w-full resize-none border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                      placeholder="ここに内容を入力してください..."
+                    />
+                  </div>
+                ) : (
+                  <div 
+                    className="markdown-content prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(previewEditableContent) }}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default MindMap;
