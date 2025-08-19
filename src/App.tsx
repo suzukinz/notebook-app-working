@@ -142,24 +142,40 @@ const AppContent: React.FC = () => {
   // グローバルキーボードショートカット
   useGlobalKeyboardShortcuts();
 
-  // データ整合性チェックの開始
+  // F5更新問題対策: 初期化処理を統合し、重複実行を防止
   useEffect(() => {
-    scheduleIntegrityCheck();
-  }, []);
-
-  // パフォーマンス監視の初期化
-  useEffect(() => {
-    // 初期化時にスタートマークを設定
-    performance.mark('search-start');
+    let initializationStarted = false;
     
-    // パフォーマンス監視開始をログ出力
-    console.log('🚀 [Performance] パフォーマンス監視システム開始');
+    const initializeApp = () => {
+      if (initializationStarted) {
+        console.warn('⚠️ App initialization already in progress, skipping duplicate execution');
+        return;
+      }
+      
+      initializationStarted = true;
+      console.log('🚀 [App] Starting application initialization');
+      
+      try {
+        // データ整合性チェックの開始
+        scheduleIntegrityCheck();
+        
+        // 初期化時にスタートマークを設定
+        performance.mark('search-start');
+        
+        console.log('✅ [App] Application initialization completed successfully');
+      } catch (error) {
+        console.error('❌ [App] Application initialization failed:', error);
+      }
+    };
+    
+    // 初期化実行
+    initializeApp();
     
     return () => {
-      // クリーンアップは不要（PerformanceObserverが自動的に管理）
-      return undefined;
+      // クリーンアップ処理
+      console.log('🧹 [App] Cleaning up application initialization');
     };
-  }, []);
+  }, []); // 依存配列を空にして一度だけ実行
 
   useEffect(() => {
     const checkMobile = () => {
