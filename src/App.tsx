@@ -64,6 +64,7 @@ const AppContent: React.FC = () => {
   // Gradual migration: Use IndexedDB store for UI state, keep localStorage store as fallback
   const indexedDBViewMode = useIndexedDBStore(state => state.viewMode);
   const indexedDBShowNoteList = useIndexedDBStore(state => state.showNoteList);
+  const indexedDBShowMindMap = useIndexedDBStore(state => state.showMindMap);
   const indexedDBInitialized = useIndexedDBStore(state => state.isInitialized);
   
   // Fallback to localStorage store if IndexedDB not ready
@@ -331,10 +332,14 @@ const AppContent: React.FC = () => {
         </Suspense>
       </div>
       
-      {/* グラフビュー（Lazy Loading） */}
-      <Suspense fallback={<LoadingSpinner text="グラフビューを読み込み中..." className="absolute inset-0 bg-white/80 z-40" />}>
-        <ObsidianGraphView />
-      </Suspense>
+      {/* グラフビュー（条件付きLazy Loading） - F5更新問題対策 */}
+      {(indexedDBInitialized ? indexedDBShowMindMap : legacyStore.showMindMap) && (
+        <ErrorBoundary>
+          <Suspense fallback={<LoadingSpinner text="グラフビューを読み込み中..." className="absolute inset-0 bg-white/80 z-40" />}>
+            <ObsidianGraphView />
+          </Suspense>
+        </ErrorBoundary>
+      )}
       
       {/* ダイアログ（Lazy Loading） */}
       <Suspense fallback={<LoadingSpinner size="sm" />}>
