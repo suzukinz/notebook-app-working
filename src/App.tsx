@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AccessibilityProvider } from './contexts/AccessibilityContext';
 import { IndexedDBProvider, InitializationWrapper } from './components/providers/IndexedDBProvider';
@@ -70,6 +70,9 @@ const AppContent: React.FC = () => {
   const legacyStore = useNotebookStore();
   const viewMode = indexedDBInitialized ? indexedDBViewMode : legacyStore.viewMode;
   const showNoteList = indexedDBInitialized ? indexedDBShowNoteList : legacyStore.showNoteList;
+
+  // Ensure app initialization runs only once per mount
+  const initializationStartedRef = useRef(false);
 
   // キーボードショートカットの追加設定
   const additionalShortcuts = [
@@ -144,15 +147,13 @@ const AppContent: React.FC = () => {
 
   // F5更新問題対策: 初期化処理を統合し、重複実行を防止
   useEffect(() => {
-    let initializationStarted = false;
-    
     const initializeApp = () => {
-      if (initializationStarted) {
+      if (initializationStartedRef.current) {
         console.warn('⚠️ App initialization already in progress, skipping duplicate execution');
         return;
       }
       
-      initializationStarted = true;
+      initializationStartedRef.current = true;
       console.log('🚀 [App] Starting application initialization');
       
       try {
