@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AccessibilityProvider } from './contexts/AccessibilityContext';
 import { IndexedDBProvider, InitializationWrapper } from './components/providers/IndexedDBProvider';
@@ -64,12 +64,16 @@ const AppContent: React.FC = () => {
   // Gradual migration: Use IndexedDB store for UI state, keep localStorage store as fallback
   const indexedDBViewMode = useIndexedDBStore(state => state.viewMode);
   const indexedDBShowNoteList = useIndexedDBStore(state => state.showNoteList);
+  const indexedDBShowMindMap = useIndexedDBStore(state => state.showMindMap);
   const indexedDBInitialized = useIndexedDBStore(state => state.isInitialized);
   
   // Fallback to localStorage store if IndexedDB not ready
   const legacyStore = useNotebookStore();
   const viewMode = indexedDBInitialized ? indexedDBViewMode : legacyStore.viewMode;
   const showNoteList = indexedDBInitialized ? indexedDBShowNoteList : legacyStore.showNoteList;
+
+  // Ensure app initialization runs only once per mount
+  const initializationStartedRef = useRef(false);
 
   // キーボードショートカットの追加設定
   const additionalShortcuts = [
@@ -142,24 +146,38 @@ const AppContent: React.FC = () => {
   // グローバルキーボードショートカット
   useGlobalKeyboardShortcuts();
 
-  // データ整合性チェックの開始
+  // F5更新問題対策: 初期化処理を統合し、重複実行を防止
   useEffect(() => {
-    scheduleIntegrityCheck();
-  }, []);
-
-  // パフォーマンス監視の初期化
-  useEffect(() => {
-    // 初期化時にスタートマークを設定
-    performance.mark('search-start');
+    const initializeApp = () => {
+      if (initializationStartedRef.current) {
+        console.warn('⚠️ App initialization already in progress, skipping duplicate execution');
+        return;
+      }
+      
+      initializationStartedRef.current = true;
+      console.log('🚀 [App] Starting application initialization');
+      
+      try {
+        // データ整合性チェックの開始
+        scheduleIntegrityCheck();
+        
+        // 初期化時にスタートマークを設定
+        performance.mark('search-start');
+        
+        console.log('✅ [App] Application initialization completed successfully');
+      } catch (error) {
+        console.error('❌ [App] Application initialization failed:', error);
+      }
+    };
     
-    // パフォーマンス監視開始をログ出力
-    console.log('🚀 [Performance] パフォーマンス監視システム開始');
+    // 初期化実行
+    initializeApp();
     
     return () => {
-      // クリーンアップは不要（PerformanceObserverが自動的に管理）
-      return undefined;
+      // クリーンアップ処理
+      console.log('🧹 [App] Cleaning up application initialization');
     };
-  }, []);
+  }, []); // 依存配列を空にして一度だけ実行
 
   useEffect(() => {
     const checkMobile = () => {
@@ -314,10 +332,14 @@ const AppContent: React.FC = () => {
         </Suspense>
       </div>
       
-      {/* グラフビュー（Lazy Loading） */}
-      <Suspense fallback={<LoadingSpinner text="グラフビューを読み込み中..." className="absolute inset-0 bg-white/80 z-40" />}>
-        <ObsidianGraphView />
-      </Suspense>
+      {/* グラフビュー（条件付きLazy Loading） - F5更新問題対策 */}
+      {(indexedDBInitialized ? indexedDBShowMindMap : legacyStore.showMindMap) && (
+        <ErrorBoundary>
+          <Suspense fallback={<LoadingSpinner text="グラフビューを読み込み中..." className="absolute inset-0 bg-white/80 z-40" />}>
+            <ObsidianGraphView />
+          </Suspense>
+        </ErrorBoundary>
+      )}
       
       {/* ダイアログ（Lazy Loading） */}
       <Suspense fallback={<LoadingSpinner size="sm" />}>

@@ -7,10 +7,16 @@ const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );
 
+// F5更新問題の潜在的原因: React.StrictModeによるuseEffect二重実行を無効化してテスト
+// 本番環境では有効にして、開発環境でのみ無効化
 root.render(
-  <React.StrictMode>
+  process.env.NODE_ENV === 'production' ? (
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  ) : (
     <App />
-  </React.StrictMode>
+  )
 );
 
 // Service Worker Registration - Phase 1 Offline Support
