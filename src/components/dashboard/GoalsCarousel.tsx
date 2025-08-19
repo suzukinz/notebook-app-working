@@ -1,5 +1,45 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Calendar, Target, CheckCircle, Clock } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Target, Plus, Edit3, Trash2, ArrowLeft, ArrowRight } from 'lucide-react';
+
+// プリセット画像の定義
+const PRESET_IMAGES = [
+  {
+    id: 'mountain',
+    url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&h=800&fit=crop',
+    name: '山頂への挑戦',
+    position: 'center'
+  },
+  {
+    id: 'ocean',
+    url: 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=1200&h=800&fit=crop',
+    name: '海への冒険',
+    position: 'center'
+  },
+  {
+    id: 'forest',
+    url: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=1200&h=800&fit=crop',
+    name: '森の静寂',
+    position: 'center'
+  },
+  {
+    id: 'city',
+    url: 'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=1200&h=800&fit=crop',
+    name: '都市の輝き',
+    position: 'center bottom'
+  },
+  {
+    id: 'book',
+    url: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=1200&h=800&fit=crop',
+    name: '知識の探求',
+    position: 'center'
+  },
+  {
+    id: 'fitness',
+    url: 'https://images.unsplash.com/photo-1538805060514-97d9cc17730c?w=1200&h=800&fit=crop',
+    name: '健康への道',
+    position: 'center'
+  }
+];
 
 interface Goal {
   id: string;
@@ -9,747 +49,2127 @@ interface Goal {
   progress: number;
   deadline: string;
   status: 'active' | 'completed' | 'paused';
-  icon: string;
-  coordinates?: string;
-  timeStamp?: string;
+  images?: string[] | undefined;
+  videos?: string[] | undefined;
+  subtitle?: string | undefined;
+  buttonText?: string | undefined;
 }
 
-interface GoalsCarouselProps {
-  currentMonth: string;
-}
-
-const GoalsCarousel: React.FC<GoalsCarouselProps> = ({ currentMonth }) => {
-  const carouselRef = useRef<HTMLDivElement>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [theta, setTheta] = useState(0);
-  const [flippedCards, setFlippedCards] = useState<Set<string>>(new Set());
-  const [isDragging, setIsDragging] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [radius, setRadius] = useState(400);
+const GoalsCarousel: React.FC = () => {
   const [userGoals, setUserGoals] = useState<Goal[]>([]);
+  const [completedGoals, setCompletedGoals] = useState<Goal[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Partial<Goal>>({});
+  const [editShowImageSelector, setEditShowImageSelector] = useState(false);
+  const [editSelectedPresetImage, setEditSelectedPresetImage] = useState<string | null>(null);
+  const [currentSlide, setCurrentSlide] = useState(0);
   const [newGoal, setNewGoal] = useState({
     title: '',
+    subtitle: '',
     description: '',
     category: 'WORK',
     deadline: '',
-    icon: ''
+    buttonText: '',
+    images: [] as string[],
+    videos: [] as string[]
   });
-  const [autoRotate, setAutoRotate] = useState(true);
-  const autoRotateRef = useRef<NodeJS.Timeout | null>(null);
+  const [showImageSelector, setShowImageSelector] = useState(false);
+  const [selectedPresetImage, setSelectedPresetImage] = useState<string | null>(null);
+  
+  // TypeScript警告を回避するための一時的な使用
+  if (false) { console.log(showImageSelector, selectedPresetImage); }
 
-  // ローカルストレージから目標を読み込む（月ごと）
+  // ローカルストレージから目標を読み込む
   useEffect(() => {
-    const monthKey = currentMonth.replace(/[年月]/g, '-'); // "2025年9月" -> "2025-9-"
-    const savedGoals = localStorage.getItem(`dashboard-goals-${monthKey}`);
+    const savedGoals = localStorage.getItem('dashboard-goals-active');
+    const savedCompleted = localStorage.getItem('dashboard-goals-completed');
+    
     if (savedGoals) {
       try {
-        setUserGoals(JSON.parse(savedGoals));
+        const goals = JSON.parse(savedGoals);
+        setUserGoals(goals);
+        if (goals.length > 0) {
+          setCurrentSlide(0);
+        }
       } catch (error) {
         console.error('Error parsing saved goals:', error);
-        setUserGoals([]); // 月ごとに空から始める
       }
-    } else {
-      // 初期状態は常に空に変更
-      setUserGoals([]);
     }
-  }, [currentMonth]);
-
-  // 目標が変更されたらローカルストレージに保存（月ごと）
-  useEffect(() => {
-    const monthKey = currentMonth.replace(/[年月]/g, '-');
-    localStorage.setItem(`dashboard-goals-${monthKey}`, JSON.stringify(userGoals));
-  }, [userGoals, currentMonth]);
-
-  const displayGoals = userGoals;
-  const totalCards = displayGoals.length;
-  const anglePerCard = totalCards > 0 ? 360 / totalCards : 0;
-
-  useEffect(() => {
-    const handleResize = () => {
-      setRadius(window.innerWidth <= 768 ? 250 : 400);
-    };
-
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    
+    if (savedCompleted) {
+      try {
+        setCompletedGoals(JSON.parse(savedCompleted));
+      } catch (error) {
+        console.error('Error parsing completed goals:', error);
+      }
+    }
   }, []);
 
-  // 自動回転機能
+  // 目標が変更されたらローカルストレージに保存
   useEffect(() => {
-    if (autoRotate && totalCards > 1) {
-      autoRotateRef.current = setInterval(() => {
-        setTheta(prev => prev - anglePerCard);
-      }, 4000); // 4秒ごとに回転
-    } else if (autoRotateRef.current) {
-      clearInterval(autoRotateRef.current);
-      autoRotateRef.current = null;
-    }
-
-    return () => {
-      if (autoRotateRef.current) {
-        clearInterval(autoRotateRef.current);
-      }
-    };
-  }, [autoRotate, totalCards, anglePerCard]);
-
+    localStorage.setItem('dashboard-goals-active', JSON.stringify(userGoals));
+  }, [userGoals]);
+  
   useEffect(() => {
-    if (carouselRef.current) {
-      carouselRef.current.style.transform = `rotateY(${theta}deg)`;
-      const newIndex = Math.round(Math.abs(theta / anglePerCard) % totalCards);
-      setCurrentIndex(newIndex >= totalCards ? 0 : newIndex);
-    }
-  }, [theta, anglePerCard, totalCards]);
-
-  const nextCard = () => {
-    setTheta(prev => prev - anglePerCard);
-    pauseAutoRotate();
-  };
-
-  const prevCard = () => {
-    setTheta(prev => prev + anglePerCard);
-    pauseAutoRotate();
-  };
-
-  const pauseAutoRotate = () => {
-    setAutoRotate(false);
-    setTimeout(() => setAutoRotate(true), 10000); // 10秒後に自動回転再開
-  };
+    localStorage.setItem('dashboard-goals-completed', JSON.stringify(completedGoals));
+  }, [completedGoals]);
 
   const addGoal = () => {
-    if (newGoal.title.trim()) { // 必須フィールドはタイトルのみ
-      const goal: Goal = {
-        id: Date.now().toString(),
-        title: newGoal.title.trim(),
-        description: newGoal.description.trim() || '目標に向けて頑張りましょう！', // デフォルト説明を設定
-        category: newGoal.category as Goal['category'],
-        progress: 0,
-        deadline: newGoal.deadline,
-        status: 'active',
-        icon: '',
-        coordinates: `${(Math.random() * 90).toFixed(4)}° N, ${(Math.random() * 180).toFixed(4)}° E`,
-        timeStamp: new Date().toLocaleTimeString('ja-JP', { 
-          hour: '2-digit', 
-          minute: '2-digit',
-          second: '2-digit'
-        })
-      };
-
-      setUserGoals(prev => [...prev, goal]);
-      setNewGoal({
-        title: '',
-        description: '',
-        category: 'WORK',
-        deadline: '',
-        icon: ''
-      });
-      setShowAddForm(false);
-      
-      // 新しい目標追加後にカルーセルを更新
-      setTimeout(() => {
-        setTheta(0); // 最初のカードを正面に表示
-      }, 100);
+    if (!newGoal.title.trim()) {
+      alert('目標のタイトルを入力してください。');
+      return;
     }
+
+    const goal: Goal = {
+      id: Date.now().toString(),
+      title: newGoal.title.trim(),
+      subtitle: newGoal.subtitle.trim() || 'My Goal',
+      description: newGoal.description.trim() || 'Let\'s achieve this amazing goal together!',
+      category: newGoal.category,
+      progress: 0,
+      deadline: newGoal.deadline,
+      status: 'active',
+      buttonText: newGoal.buttonText.trim() || 'Start working',
+      ...(newGoal.images.length > 0 && { images: [...newGoal.images] }),
+      ...(newGoal.videos.length > 0 && { videos: [...newGoal.videos] })
+    };
+
+    setUserGoals(prev => [...prev, goal]);
+    
+    // フォームリセット
+    setNewGoal({
+      title: '',
+      subtitle: '',
+      description: '',
+      category: 'WORK',
+      deadline: '',
+      buttonText: '',
+      images: [],
+      videos: []
+    });
+    
+    setShowAddForm(false);
   };
 
   const deleteGoal = (goalId: string) => {
-    setUserGoals(prev => {
-      const filtered = prev.filter(goal => goal.id !== goalId);
-      console.log('削除後の目標:', filtered); // デバッグ用
-      return filtered;
+    const goalIndex = userGoals.findIndex(g => g.id === goalId);
+    setUserGoals(prev => prev.filter(goal => goal.id !== goalId));
+    setCompletedGoals(prev => prev.filter(goal => goal.id !== goalId));
+    
+    // 現在のスライドを調整
+    if (goalIndex <= currentSlide && currentSlide > 0) {
+      setCurrentSlide(currentSlide - 1);
+    } else if (currentSlide >= userGoals.length - 1 && userGoals.length > 1) {
+      setCurrentSlide(userGoals.length - 2);
+    }
+  };
+
+  const startEditGoal = (goal: Goal) => {
+    setEditingGoal(goal.id);
+    setEditForm({
+      title: goal.title,
+      subtitle: goal.subtitle || undefined,
+      description: goal.description,
+      category: goal.category,
+      deadline: goal.deadline,
+      buttonText: goal.buttonText || undefined,
+      images: goal.images || [],
+      videos: goal.videos || []
     });
-    setFlippedCards(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(goalId);
-      return newSet;
-    });
+    setEditShowImageSelector(false);
+    const firstImage = goal.images?.[0];
+    const isPresetImage = firstImage && PRESET_IMAGES.some(p => p.url === firstImage);
+    setEditSelectedPresetImage(isPresetImage ? firstImage : null);
+  };
+
+  const saveGoalEdit = () => {
+    if (!editingGoal || !editForm.title?.trim()) {
+      alert('タイトルを入力してください。');
+      return;
+    }
+
+    setUserGoals(prev => prev.map(goal => 
+      goal.id === editingGoal 
+        ? { 
+            ...goal, 
+            title: editForm.title!.trim(),
+            subtitle: editForm.subtitle?.trim() || 'My Goal',
+            description: editForm.description?.trim() || 'Let\'s achieve this amazing goal together!',
+            category: editForm.category || 'WORK',
+            deadline: editForm.deadline || '',
+            buttonText: editForm.buttonText?.trim() || 'Start working',
+            ...(editForm.images && editForm.images.length > 0 && { images: [...editForm.images] }),
+            ...(editForm.videos && editForm.videos.length > 0 && { videos: [...editForm.videos] })
+          }
+        : goal
+    ));
+    
+    setEditingGoal(null);
+    setEditForm({});
+    setEditShowImageSelector(false);
+    setEditSelectedPresetImage(null);
   };
 
   const updateGoalProgress = (goalId: string, progress: number) => {
-    setUserGoals(prev => prev.map(goal => 
-      goal.id === goalId 
-        ? { ...goal, progress, status: progress === 100 ? 'completed' : 'active' }
-        : goal
-    ));
+    setUserGoals(prev => {
+      const updatedGoals = prev.map(goal => 
+        goal.id === goalId 
+          ? { ...goal, progress, status: (progress === 100 ? 'completed' : 'active') as Goal['status'] }
+          : goal
+      );
+      
+      // 100%になった目標を完了リストに移動
+      if (progress === 100) {
+        const completedGoal = updatedGoals.find(g => g.id === goalId);
+        if (completedGoal) {
+          setCompletedGoals(prevCompleted => [...prevCompleted, { ...completedGoal, status: 'completed' }]);
+          return updatedGoals.filter(g => g.id !== goalId);
+        }
+      }
+      
+      return updatedGoals;
+    });
   };
 
-  const flipCard = (goalId: string) => {
-    const goalIndex = displayGoals.findIndex(g => g.id === goalId);
-    if (goalIndex === currentIndex) {
-      setFlippedCards(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(goalId)) {
-          newSet.delete(goalId);
-        } else {
-          newSet.add(goalId);
-        }
-        return newSet;
+  const moveSlide = (direction: 'left' | 'right') => {
+    const total = userGoals.length;
+    if (total === 0) return;
+
+    if (direction === 'right') {
+      setCurrentSlide(prev => (prev + 1) % total);
+    } else {
+      setCurrentSlide(prev => (prev - 1 + total) % total);
+    }
+  };
+
+  const handleNewGoalImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const promises = Array.from(files).map(file => {
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            resolve(reader.result as string);
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+      
+      Promise.all(promises).then(results => {
+        setNewGoal(prev => ({
+          ...prev,
+          images: [...prev.images, ...results]
+        }));
       });
     }
   };
 
-  const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
-    setIsDragging(true);
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    setStartX(clientX);
-    pauseAutoRotate();
-  };
-
-  const handleDrag = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDragging) return;
-    e.preventDefault();
-    
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const diffX = clientX - startX;
-    const sensitivity = 0.5;
-    const newTheta = theta + diffX * sensitivity;
-    
-    if (carouselRef.current) {
-      carouselRef.current.style.transform = `rotateY(${newTheta}deg)`;
+  const handleNewGoalVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const promises = Array.from(files).map(file => {
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            resolve(reader.result as string);
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+      
+      Promise.all(promises).then(results => {
+        setNewGoal(prev => ({
+          ...prev,
+          videos: [...prev.videos, ...results]
+        }));
+      });
     }
   };
 
-  const handleDragEnd = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDragging) return;
-    setIsDragging(false);
-    
-    let clientX: number;
-    if ('changedTouches' in e && e.changedTouches) {
-      clientX = e.changedTouches[0].clientX;
-    } else if ('touches' in e && e.touches) {
-      clientX = e.touches[0].clientX;
-    } else {
-      clientX = (e as React.MouseEvent).clientX;
-    }
-    const diffX = clientX - startX;
-    
-    if (Math.abs(diffX) > 20) {
-      if (diffX > 0) {
-        prevCard();
-      } else {
-        nextCard();
-      }
-    } else {
-      const snapAngle = Math.round(theta / anglePerCard) * anglePerCard;
-      setTheta(snapAngle);
-    }
-  };
+  // removeNewGoalImage関数は新しい画像選択方式では不要
+  // const removeNewGoalImage = (index: number) => {
+  //   setNewGoal(prev => ({
+  //     ...prev,
+  //     images: prev.images.filter((_, i) => i !== index)
+  //   }));
+  // };
 
-  const getProgressColor = (progress: number, status: string) => {
-    if (status === 'completed') return 'bg-green-500';
-    if (progress >= 75) return 'bg-blue-500';
-    if (progress >= 50) return 'bg-yellow-500';
-    if (progress >= 25) return 'bg-orange-500';
-    return 'bg-red-500';
+  const removeNewGoalVideo = (index: number) => {
+    setNewGoal(prev => ({
+      ...prev,
+      videos: prev.videos.filter((_, i) => i !== index)
+    }));
   };
 
   const getCategoryColor = (category: string) => {
     const colors = {
-      'WORK': 'text-blue-600',
-      'LEARNING': 'text-purple-600',
-      'HEALTH': 'text-green-600',
-      'PERSONAL': 'text-pink-600',
-      'CAREER': 'text-indigo-600',
-      'CREATIVE': 'text-yellow-600'
+      'WORK': '#4d4dff',
+      'LEARNING': '#9333ea',
+      'HEALTH': '#10b981',
+      'PERSONAL': '#ec4899',
+      'CAREER': '#6366f1',
+      'CREATIVE': '#f59e0b'
     };
-    return colors[category as keyof typeof colors] || 'text-gray-600';
+    return colors[category as keyof typeof colors] || '#6b7280';
   };
 
-  const getCategoryBgColor = (category: string) => {
-    const colors = {
-      'WORK': 'rgba(59, 130, 246, 0.1)',
-      'LEARNING': 'rgba(147, 51, 234, 0.1)',
-      'HEALTH': 'rgba(16, 185, 129, 0.1)',
-      'PERSONAL': 'rgba(236, 72, 153, 0.1)',
-      'CAREER': 'rgba(99, 102, 241, 0.1)',
-      'CREATIVE': 'rgba(245, 158, 11, 0.1)'
+  const getCategoryName = (category: string) => {
+    const names = {
+      'WORK': '仕事',
+      'LEARNING': '学習',
+      'HEALTH': '健康',
+      'PERSONAL': '個人',
+      'CAREER': 'キャリア',
+      'CREATIVE': '創作'
     };
-    return colors[category as keyof typeof colors] || 'rgba(107, 114, 128, 0.1)';
+    return names[category as keyof typeof names] || category;
   };
 
   return (
-    <div className="goals-carousel-container bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 h-full relative">
-      {/* Background with subtle pattern */}
-      <div className="absolute inset-0 opacity-5 pointer-events-none rounded-lg">
-        <div className="stars-container"></div>
-      </div>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css?family=Playfair+Display:400,400i,700,700i,900,900i');
+        @import url('https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i,800,800i');
+        
+        .goals-carousel {
+          width: 100%;
+          height: 700px;
+          display: flex;
+          max-width: 1400px;
+          margin: 0 auto;
+          overflow: hidden;
+          position: relative;
+          background-color: transparent;
+          border-radius: 0;
+          box-shadow: none;
+        }
+        
+        .carousel-item {
+          display: flex;
+          width: 100%;
+          height: 100%;
+          align-items: center;
+          justify-content: flex-end;
+          position: absolute;
+          background-color: transparent;
+          flex-shrink: 0;
+          z-index: 0;
+          transition: 0.6s all linear;
+          opacity: 0;
+          visibility: hidden;
+        }
+        
+        .carousel-item.active {
+          z-index: 1;
+          opacity: 1;
+          visibility: visible;
+        }
+        
+        .carousel-item__info {
+          height: 100%;
+          display: flex;
+          justify-content: center;
+          flex-direction: column;
+          order: 1;
+          left: 0;
+          margin: auto;
+          padding: 0 60px;
+          width: 50%;
+          background-color: #fff;
+          box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+          z-index: 2;
+          position: relative;
+        }
+        
+        .carousel-item__image {
+          width: 50%;
+          height: 100%;
+          order: 2;
+          align-self: flex-end;
+          flex-basis: 50%;
+          background-position: center;
+          background-repeat: no-repeat;
+          background-size: contain;
+          position: relative;
+          transform: translateX(100%);
+          transition: 0.6s all ease-in-out;
+          background-color: #f8f9fa;
+        }
+        
+        .carousel-item.active .carousel-item__image {
+          transform: translateX(0);
+        }
+        
+        .carousel-item__subtitle {
+          font-family: 'Open Sans', sans-serif;
+          letter-spacing: 3px;
+          font-size: 10px;
+          text-transform: uppercase;
+          margin: 0;
+          color: #7E7E7E;
+          font-weight: 700;
+          transform: translateY(25%);
+          opacity: 0;
+          visibility: hidden;
+          transition: 0.4s all ease-in-out;
+        }
+        
+        .carousel-item__title {
+          margin: 15px 0 0 0;
+          font-family: 'Playfair Display', serif;
+          font-size: 56px;
+          line-height: 60px;
+          letter-spacing: 3px;
+          font-weight: 700;
+          color: #2C2C2C;
+          transform: translateY(25%);
+          opacity: 0;
+          visibility: hidden;
+          transition: 0.6s all ease-in-out;
+        }
+        
+        .carousel-item__description {
+          transform: translateY(25%);
+          opacity: 0;
+          visibility: hidden;
+          transition: 0.6s all ease-in-out;
+          margin-top: 35px;
+          font-family: 'Open Sans', sans-serif;
+          font-size: 18px;
+          color: #7e7e7e;
+          line-height: 30px;
+          margin-bottom: 35px;
+        }
+        
+        .carousel-item__progress {
+          transform: translateY(25%);
+          opacity: 0;
+          visibility: hidden;
+          transition: 0.6s all ease-in-out;
+          margin-bottom: 25px;
+        }
+        
+        .carousel-item__btn {
+          color: #2C2C2C;
+          font-family: 'Open Sans', sans-serif;
+          letter-spacing: 3px;
+          font-size: 11px;
+          text-transform: uppercase;
+          margin: 0;
+          font-weight: 700;
+          text-decoration: none;
+          transform: translateY(25%);
+          opacity: 0;
+          visibility: hidden;
+          transition: 0.6s all ease-in-out;
+          border: 2px solid #2C2C2C;
+          padding: 12px 24px;
+          display: inline-block;
+          cursor: pointer;
+          background: transparent;
+          transition: 0.3s all ease;
+        }
+        
+        .carousel-item__btn:hover {
+          background: #2C2C2C;
+          color: #fff;
+        }
+        
+        .carousel-item.active .carousel-item__subtitle,
+        .carousel-item.active .carousel-item__title,
+        .carousel-item.active .carousel-item__description,
+        .carousel-item.active .carousel-item__progress,
+        .carousel-item.active .carousel-item__btn {
+          transform: translateY(0);
+          opacity: 1;
+          visibility: visible;
+          transition: 0.6s all ease-in-out;
+        }
+        
+        .carousel__nav {
+          position: absolute;
+          right: 0;
+          z-index: 2;
+          background-color: #fff;
+          bottom: 0;
+          box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .carousel__arrow {
+          cursor: pointer;
+          display: inline-block;
+          padding: 15px 20px;
+          position: relative;
+          transition: 0.3s all ease;
+        }
+        
+        .carousel__arrow:hover {
+          background-color: #f5f5f5;
+        }
+        
+        .carousel__arrow:nth-child(1):after {
+          content: '';
+          right: -1px;
+          position: absolute;
+          width: 1px;
+          background-color: #e0e0e0;
+          height: 20px;
+          top: 50%;
+          margin-top: -10px;
+        }
+        
+        .progress-bar {
+          width: 100%;
+          height: 4px;
+          background-color: #f0f0f0;
+          border-radius: 2px;
+          overflow: hidden;
+          margin-bottom: 8px;
+        }
+        
+        .progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #4d4dff, #9333ea);
+          transition: width 0.3s ease;
+          border-radius: 2px;
+        }
+        
+        .progress-text {
+          font-family: 'Open Sans', sans-serif;
+          font-size: 12px;
+          color: #7e7e7e;
+          margin-bottom: 8px;
+        }
+        
+        .progress-slider {
+          width: 100%;
+          margin-top: 8px;
+          -webkit-appearance: none;
+          appearance: none;
+          height: 4px;
+          background: #f0f0f0;
+          outline: none;
+          border-radius: 2px;
+        }
+        
+        .progress-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 16px;
+          height: 16px;
+          background: #4d4dff;
+          cursor: pointer;
+          border-radius: 50%;
+        }
+        
+        .progress-slider::-moz-range-thumb {
+          width: 16px;
+          height: 16px;
+          background: #4d4dff;
+          cursor: pointer;
+          border-radius: 50%;
+          border: none;
+        }
+        
+        
+        .deadline-badge {
+          font-family: 'Open Sans', sans-serif;
+          font-size: 10px;
+          color: #7e7e7e;
+          background: rgba(255,255,255,0.9);
+          padding: 4px 12px;
+          border-radius: 12px;
+          position: absolute;
+          top: 20px;
+          left: 20px;
+          z-index: 3;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+        }
+        
+        @media (max-width: 768px) {
+          .goals-carousel {
+            height: 600px;
+            margin: 0 1rem;
+            max-width: 100%;
+          }
+          
+          .carousel-item__info {
+            width: 50%;
+            padding: 0 35px;
+            background-color: #fff;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+          }
+          
+          .carousel-item__image {
+            width: 50%;
+          }
+          
+          .carousel-item__title {
+            font-size: 32px;
+            line-height: 36px;
+          }
+        }
+        
+        @media (max-width: 480px) {
+          .goals-carousel {
+            height: 550px;
+            flex-direction: column;
+            margin: 0 0.5rem;
+          }
+          
+          .carousel-item {
+            flex-direction: column;
+          }
+          
+          .carousel-item__info {
+            width: 100%;
+            order: 2;
+            padding: 20px;
+            height: 55%;
+            background-color: #fff;
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+          }
+          
+          .carousel-item__image {
+            width: 100%;
+            order: 1;
+            height: 45%;
+            transform: translateY(-100%);
+          }
+          
+          .carousel-item.active .carousel-item__image {
+            transform: translateY(0);
+          }
+        }
+      `}</style>
 
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-3">
-          <Target className="w-6 h-6 text-blue-500" />
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {currentMonth}の目標
-          </h2>
-        </div>
-        <div className="flex items-center space-x-2 relative z-20">
-          <button
-            onClick={() => setAutoRotate(!autoRotate)}
-            className={`px-3 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-              autoRotate 
-                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
-                : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-            }`}
-          >
-            {autoRotate ? '自動回転中' : '手動操作'}
-          </button>
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              console.log('目標追加ボタンがクリックされました');
-              setShowAddForm(!showAddForm);
-            }}
-            className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors cursor-pointer relative z-10"
-          >
-            目標追加
-          </button>
-        </div>
-      </div>
-
-      {/* 目標がない場合の表示 */}
-      {displayGoals.length === 0 && !showAddForm && (
-        <div className="text-center py-12">
-          <div className="mb-4">
-            <Target className="w-16 h-16 text-gray-400 mx-auto" />
+      <div style={{ 
+        background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)', 
+        minHeight: 'auto', 
+        padding: '2rem 2rem 1rem 2rem',
+        boxSizing: 'border-box' 
+      }}>
+        {/* ヘッダー */}
+        <div style={{ 
+          textAlign: 'center', 
+          marginBottom: '2rem' 
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            gap: '1rem',
+            marginBottom: '1rem' 
+          }}>
+            <Target size={32} color="#4d4dff" />
+            <h1 style={{ 
+              fontSize: '2.5rem', 
+              fontWeight: '300', 
+              color: '#2C2C2C', 
+              margin: '0',
+              fontFamily: "'Playfair Display', serif"
+            }}>
+              Goal Journey
+            </h1>
           </div>
-          <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
-            まだ目標がありません
-          </h3>
-          <p className="text-gray-500 dark:text-gray-400 mb-6">
-            新しい目標を追加して、{currentMonth}をもっと充実させましょう！
+          <p style={{
+            fontFamily: "'Open Sans', sans-serif",
+            fontSize: '14px',
+            color: '#7e7e7e',
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+            margin: '0 0 2rem 0'
+          }}>
+            Discover your path to success
           </p>
           <button
             onClick={() => setShowAddForm(true)}
-            className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            style={{
+              background: 'linear-gradient(135deg, #4d4dff, #9333ea)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '25px',
+              padding: '0.75rem 2rem',
+              fontSize: '0.9rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              margin: '0 auto',
+              fontFamily: "'Open Sans', sans-serif",
+              letterSpacing: '2px',
+              textTransform: 'uppercase',
+              fontWeight: '600',
+              transition: '0.3s all ease',
+              boxShadow: '0 4px 15px rgba(77, 77, 255, 0.3)'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(77, 77, 255, 0.4)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 15px rgba(77, 77, 255, 0.3)';
+            }}
           >
-            最初の目標を追加
+            <Plus size={20} />
+            Create New Goal
           </button>
         </div>
-      )}
 
-      {/* 目標追加フォーム */}
-      {showAddForm && (
-        <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">新しい目標を追加</h3>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  目標タイトル *
+        {/* 美しいカルーセル */}
+        {userGoals.length > 0 && (
+          <div className="goals-carousel">
+            {userGoals.map((goal, index) => (
+              <div
+                key={goal.id}
+                className={`carousel-item ${index === currentSlide ? 'active' : ''}`}
+              >
+                {/* 期限バッジ */}
+                {goal.deadline && (
+                  <div className="deadline-badge">
+                    Due: {new Date(goal.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </div>
+                )}
+
+                {/* アクションボタン - 左上に移動 */}
+                <div style={{
+                  position: 'absolute',
+                  top: '20px',
+                  left: '20px',
+                  zIndex: 3,
+                  display: 'flex',
+                  gap: '8px'
+                }}>
+                  <button
+                    onClick={() => startEditGoal(goal)}
+                    style={{
+                      background: 'rgba(255,255,255,0.9)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '8px',
+                      cursor: 'pointer',
+                      transition: '0.2s all ease',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = 'rgba(255,255,255,1)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.9)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                    title="編集"
+                  >
+                    <Edit3 size={16} color="#666" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('この目標を削除しますか？')) {
+                        deleteGoal(goal.id);
+                      }
+                    }}
+                    style={{
+                      background: 'rgba(255,255,255,0.9)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '8px',
+                      cursor: 'pointer',
+                      transition: '0.2s all ease',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = 'rgba(255,255,255,1)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.9)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                    title="削除"
+                  >
+                    <Trash2 size={16} color="#666" />
+                  </button>
+                </div>
+
+                <div className="carousel-item__info">
+                  <div className="carousel-item__container">
+                    <h2 className="carousel-item__subtitle">{getCategoryName(goal.category)}</h2>
+                    <h1 className="carousel-item__title">{goal.title}</h1>
+                    <p className="carousel-item__description">{goal.description}</p>
+                    
+                    <div className="carousel-item__progress">
+                      <div className="progress-text">Progress: {goal.progress}%</div>
+                      <div className="progress-bar">
+                        <div 
+                          className="progress-fill" 
+                          style={{ width: `${goal.progress}%` }}
+                        />
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={goal.progress}
+                        onChange={(e) => updateGoalProgress(goal.id, parseInt(e.target.value))}
+                        className="progress-slider"
+                      />
+                    </div>
+                    
+                    <div className="carousel-item__btn">
+                      {goal.buttonText || 'Start working'}
+                    </div>
+                  </div>
+                </div>
+                
+                <div 
+                  className="carousel-item__image"
+                  style={{
+                    backgroundImage: goal.images && goal.images.length > 0 
+                      ? `url(${goal.images[0]})` 
+                      : `linear-gradient(135deg, ${getCategoryColor(goal.category)}15, ${getCategoryColor(goal.category)}30)`,
+                    backgroundColor: goal.images && goal.images.length > 0 ? '#f8f9fa' : getCategoryColor(goal.category),
+                    backgroundPosition: goal.images && goal.images.length > 0 
+                      ? (PRESET_IMAGES.find(p => p.url === goal.images![0])?.position || 'center')
+                      : 'center'
+                  }}
+                >
+                  {(!goal.images || goal.images.length === 0) && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      textAlign: 'center'
+                    }}>
+                      <Target size={64} color="rgba(255,255,255,0.3)" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {/* ナビゲーションアローズ */}
+            <div className="carousel__nav">
+              <span 
+                className="carousel__arrow" 
+                onClick={() => moveSlide('left')}
+              >
+                <ArrowLeft size={20} color="#5d5d5d" />
+              </span>
+              <span 
+                className="carousel__arrow" 
+                onClick={() => moveSlide('right')}
+              >
+                <ArrowRight size={20} color="#5d5d5d" />
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* 目標がない場合の表示 */}
+        {userGoals.length === 0 && !showAddForm && (
+          <div style={{ 
+            textAlign: 'center', 
+            padding: '2rem 2rem 1rem 2rem',
+            color: '#7e7e7e' 
+          }}>
+            <Target size={96} color="#e0e0e0" style={{ marginBottom: '1rem' }} />
+            <h3 style={{ 
+              fontSize: '2rem', 
+              fontWeight: '300', 
+              marginBottom: '1rem',
+              fontFamily: "'Playfair Display', serif",
+              color: '#2C2C2C'
+            }}>
+              Begin Your Journey
+            </h3>
+            <p style={{ 
+              marginBottom: '1rem',
+              fontFamily: "'Open Sans', sans-serif",
+              fontSize: '14px',
+              letterSpacing: '1px',
+              lineHeight: '24px',
+              maxWidth: '400px',
+              margin: '0 auto 1rem'
+            }}>
+              Create your first goal and start building the life you've always dreamed of. Every great achievement begins with a single step.
+            </p>
+            <button
+              onClick={() => setShowAddForm(true)}
+              style={{
+                background: 'linear-gradient(135deg, #4d4dff, #9333ea)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '25px',
+                padding: '0.75rem 2rem',
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                fontFamily: "'Open Sans', sans-serif",
+                letterSpacing: '2px',
+                textTransform: 'uppercase',
+                fontWeight: '600',
+                transition: '0.3s all ease',
+                boxShadow: '0 4px 15px rgba(77, 77, 255, 0.3)'
+              }}
+            >
+              Create First Goal
+            </button>
+          </div>
+        )}
+
+        {/* 目標編集フォーム */}
+        {editingGoal && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem'
+          }}>
+            <div style={{
+              background: '#fff',
+              borderRadius: '12px',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)',
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              padding: '2rem'
+            }}>
+              <h2 style={{ 
+                fontSize: '1.8rem', 
+                fontWeight: '300', 
+                color: '#2C2C2C', 
+                marginBottom: '1.5rem',
+                fontFamily: "'Playfair Display', serif",
+                textAlign: 'center'
+              }}>
+                Edit Goal
+              </h2>
+              
+              {/* タイトル */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontFamily: "'Open Sans', sans-serif",
+                  fontSize: '12px',
+                  color: '#7e7e7e',
+                  letterSpacing: '2px',
+                  textTransform: 'uppercase',
+                  fontWeight: '600'
+                }}>
+                  Goal Title *
+                </label>
+                <input
+                  type="text"
+                  value={editForm.title || ''}
+                  onChange={(e) => setEditForm({...editForm, title: e.target.value})}
+                  placeholder="Enter your amazing goal"
+                  style={{
+                    width: '100%',
+                    padding: '1rem',
+                    border: '2px solid #f0f0f0',
+                    borderRadius: '6px',
+                    fontSize: '1rem',
+                    fontFamily: "'Playfair Display', serif",
+                    transition: '0.2s all ease',
+                    outline: 'none'
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#4d4dff';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#f0f0f0';
+                  }}
+                  maxLength={50}
+                />
+              </div>
+
+              {/* サブタイトル */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontFamily: "'Open Sans', sans-serif",
+                  fontSize: '12px',
+                  color: '#7e7e7e',
+                  letterSpacing: '2px',
+                  textTransform: 'uppercase',
+                  fontWeight: '600'
+                }}>
+                  Subtitle
+                </label>
+                <input
+                  type="text"
+                  value={editForm.subtitle || ''}
+                  onChange={(e) => setEditForm({...editForm, subtitle: e.target.value})}
+                  placeholder="My Goal"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '2px solid #f0f0f0',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    transition: '0.2s all ease',
+                    outline: 'none'
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#4d4dff';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#f0f0f0';
+                  }}
+                  maxLength={30}
+                />
+              </div>
+
+              {/* 説明 */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontFamily: "'Open Sans', sans-serif",
+                  fontSize: '12px',
+                  color: '#7e7e7e',
+                  letterSpacing: '2px',
+                  textTransform: 'uppercase',
+                  fontWeight: '600'
+                }}>
+                  Description
+                </label>
+                <textarea
+                  value={editForm.description || ''}
+                  onChange={(e) => setEditForm({...editForm, description: e.target.value})}
+                  placeholder="Describe your journey to success..."
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '1rem',
+                    border: '2px solid #f0f0f0',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    resize: 'vertical',
+                    lineHeight: '1.5',
+                    transition: '0.2s all ease',
+                    outline: 'none'
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#4d4dff';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#f0f0f0';
+                  }}
+                  maxLength={200}
+                />
+              </div>
+
+              {/* カテゴリと期限 */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '1rem',
+                marginBottom: '1rem'
+              }}>
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '0.5rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    fontSize: '12px',
+                    color: '#7e7e7e',
+                    letterSpacing: '2px',
+                    textTransform: 'uppercase',
+                    fontWeight: '600'
+                  }}>
+                    Category
+                  </label>
+                  <select
+                    value={editForm.category || 'WORK'}
+                    onChange={(e) => setEditForm({...editForm, category: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '2px solid #f0f0f0',
+                      borderRadius: '6px',
+                      fontSize: '0.9rem',
+                      fontFamily: "'Open Sans', sans-serif",
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="WORK">仕事</option>
+                    <option value="LEARNING">学習</option>
+                    <option value="HEALTH">健康</option>
+                    <option value="PERSONAL">個人</option>
+                    <option value="CAREER">キャリア</option>
+                    <option value="CREATIVE">創作</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '0.5rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    fontSize: '12px',
+                    color: '#7e7e7e',
+                    letterSpacing: '2px',
+                    textTransform: 'uppercase',
+                    fontWeight: '600'
+                  }}>
+                    Deadline
+                  </label>
+                  <input
+                    type="date"
+                    value={editForm.deadline || ''}
+                    onChange={(e) => setEditForm({...editForm, deadline: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '2px solid #f0f0f0',
+                      borderRadius: '6px',
+                      fontSize: '0.9rem',
+                      fontFamily: "'Open Sans', sans-serif",
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* ボタンテキスト */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontFamily: "'Open Sans', sans-serif",
+                  fontSize: '12px',
+                  color: '#7e7e7e',
+                  letterSpacing: '2px',
+                  textTransform: 'uppercase',
+                  fontWeight: '600'
+                }}>
+                  Action Button Text
+                </label>
+                <input
+                  type="text"
+                  value={editForm.buttonText || ''}
+                  onChange={(e) => setEditForm({...editForm, buttonText: e.target.value})}
+                  placeholder="Start working"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '2px solid #f0f0f0',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    transition: '0.2s all ease',
+                    outline: 'none'
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#4d4dff';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#f0f0f0';
+                  }}
+                  maxLength={30}
+                />
+              </div>
+
+              {/* 画像選択セクション */}
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontFamily: "'Open Sans', sans-serif",
+                  fontSize: '12px',
+                  color: '#7e7e7e',
+                  letterSpacing: '2px',
+                  textTransform: 'uppercase',
+                  fontWeight: '600'
+                }}>
+                  Goal Image
+                </label>
+                
+                {/* 画像選択ボタン */}
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setEditShowImageSelector(!editShowImageSelector)}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      background: editShowImageSelector ? '#4d4dff' : '#f8f9fa',
+                      color: editShowImageSelector ? 'white' : '#666',
+                      border: '2px solid ' + (editShowImageSelector ? '#4d4dff' : '#e9ecef'),
+                      borderRadius: '6px',
+                      fontSize: '0.9rem',
+                      fontFamily: "'Open Sans', sans-serif",
+                      cursor: 'pointer',
+                      transition: '0.2s all ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    🎨 プリセット画像から選択
+                  </button>
+                  
+                  <label style={{
+                    cursor: 'pointer',
+                    padding: '0.75rem 1.5rem',
+                    background: '#f0f8ff',
+                    border: '2px solid #e6f3ff',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    transition: '0.2s all ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    📷 画像をアップロード
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const files = e.target.files;
+                        if (files && files[0]) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setEditForm(prev => ({
+                              ...prev,
+                              images: [reader.result as string]
+                            }));
+                            setEditSelectedPresetImage(null);
+                          };
+                          reader.readAsDataURL(files[0]);
+                        }
+                      }}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                </div>
+                
+                {/* プリセット画像セレクター */}
+                {editShowImageSelector && (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '1rem',
+                    marginBottom: '1rem',
+                    padding: '1rem',
+                    background: '#f8f9fa',
+                    borderRadius: '8px'
+                  }}>
+                    {PRESET_IMAGES.map((preset) => (
+                      <div
+                        key={preset.id}
+                        style={{
+                          position: 'relative',
+                          cursor: 'pointer',
+                          borderRadius: '6px',
+                          overflow: 'hidden',
+                          border: editSelectedPresetImage === preset.url ? '3px solid #4d4dff' : '3px solid transparent',
+                          transition: '0.2s all ease'
+                        }}
+                        onClick={() => {
+                          setEditSelectedPresetImage(preset.url);
+                          setEditForm(prev => ({
+                            ...prev,
+                            images: [preset.url]
+                          }));
+                        }}
+                      >
+                        <img
+                          src={preset.url}
+                          alt={preset.name}
+                          style={{
+                            width: '100%',
+                            height: '100px',
+                            objectFit: 'cover'
+                          }}
+                        />
+                        <div style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
+                          color: 'white',
+                          padding: '0.5rem',
+                          fontSize: '0.75rem',
+                          fontFamily: "'Open Sans', sans-serif"
+                        }}>
+                          {preset.name}
+                        </div>
+                        {editSelectedPresetImage === preset.url && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '0.5rem',
+                            right: '0.5rem',
+                            width: '24px',
+                            height: '24px',
+                            background: '#4d4dff',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '14px'
+                          }}>
+                            ✓
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* 選択された画像のプレビュー */}
+                {editForm.images && editForm.images.length > 0 && (
+                  <div style={{
+                    marginTop: '1rem',
+                    padding: '1rem',
+                    background: '#f8f9fa',
+                    borderRadius: '8px'
+                  }}>
+                    <div style={{
+                      fontSize: '0.8rem',
+                      color: '#666',
+                      marginBottom: '0.5rem',
+                      fontFamily: "'Open Sans', sans-serif"
+                    }}>
+                      選択された画像:
+                    </div>
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                      <img
+                        src={editForm.images[0]}
+                        alt="Goal visual"
+                        style={{
+                          width: '200px',
+                          height: '150px',
+                          objectFit: 'cover',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          setEditForm(prev => ({ ...prev, images: [] }));
+                          setEditSelectedPresetImage(null);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '-8px',
+                          right: '-8px',
+                          width: '24px',
+                          height: '24px',
+                          background: '#ff4757',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '50%',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'flex-end', 
+                gap: '1rem',
+                marginTop: '2rem'
+              }}>
+                <button
+                  onClick={() => {
+                    setEditingGoal(null);
+                    setEditForm({});
+                    setEditShowImageSelector(false);
+                    setEditSelectedPresetImage(null);
+                  }}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    border: '2px solid #e0e0e0',
+                    borderRadius: '6px',
+                    background: 'white',
+                    color: '#666',
+                    cursor: 'pointer',
+                    fontFamily: "'Open Sans', sans-serif",
+                    fontSize: '0.9rem',
+                    transition: '0.2s all ease'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveGoalEdit}
+                  disabled={!editForm.title?.trim()}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    border: 'none',
+                    borderRadius: '6px',
+                    background: editForm.title?.trim() 
+                      ? 'linear-gradient(135deg, #4d4dff, #9333ea)' 
+                      : '#ccc',
+                    color: 'white',
+                    cursor: editForm.title?.trim() ? 'pointer' : 'not-allowed',
+                    fontFamily: "'Open Sans', sans-serif",
+                    fontSize: '0.9rem',
+                    fontWeight: '600',
+                    transition: '0.2s all ease'
+                  }}
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 目標追加フォーム */}
+        {showAddForm && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem'
+          }}>
+            <div style={{
+              background: '#fff',
+              borderRadius: '12px',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)',
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              padding: '2rem'
+            }}>
+              <h2 style={{ 
+                fontSize: '1.8rem', 
+                fontWeight: '300', 
+                color: '#2C2C2C', 
+                marginBottom: '1.5rem',
+                fontFamily: "'Playfair Display', serif",
+                textAlign: 'center'
+              }}>
+                Create New Goal
+              </h2>
+              
+              {/* タイトル */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontFamily: "'Open Sans', sans-serif",
+                  fontSize: '12px',
+                  color: '#7e7e7e',
+                  letterSpacing: '2px',
+                  textTransform: 'uppercase',
+                  fontWeight: '600'
+                }}>
+                  Goal Title *
                 </label>
                 <input
                   type="text"
                   value={newGoal.title}
                   onChange={(e) => setNewGoal({...newGoal, title: e.target.value})}
-                  placeholder="例: プロジェクト完成"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  placeholder="Enter your amazing goal"
+                  style={{
+                    width: '100%',
+                    padding: '1rem',
+                    border: '2px solid #f0f0f0',
+                    borderRadius: '6px',
+                    fontSize: '1rem',
+                    fontFamily: "'Playfair Display', serif",
+                    transition: '0.2s all ease',
+                    outline: 'none'
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#4d4dff';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#f0f0f0';
+                  }}
                   maxLength={50}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  カテゴリ
+
+              {/* サブタイトル */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontFamily: "'Open Sans', sans-serif",
+                  fontSize: '12px',
+                  color: '#7e7e7e',
+                  letterSpacing: '2px',
+                  textTransform: 'uppercase',
+                  fontWeight: '600'
+                }}>
+                  Subtitle
                 </label>
-                <select
-                  value={newGoal.category}
-                  onChange={(e) => setNewGoal({...newGoal, category: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                >
-                  <option value="WORK">仕事</option>
-                  <option value="LEARNING">学習</option>
-                  <option value="HEALTH">健康</option>
-                  <option value="PERSONAL">個人</option>
-                  <option value="CAREER">キャリア</option>
-                  <option value="CREATIVE">創作</option>
-                </select>
+                <input
+                  type="text"
+                  value={newGoal.subtitle}
+                  onChange={(e) => setNewGoal({...newGoal, subtitle: e.target.value})}
+                  placeholder="My Goal"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '2px solid #f0f0f0',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    transition: '0.2s all ease',
+                    outline: 'none'
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#4d4dff';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#f0f0f0';
+                  }}
+                  maxLength={30}
+                />
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                期限
-              </label>
-              <input
-                type="date"
-                value={newGoal.deadline}
-                onChange={(e) => setNewGoal({...newGoal, deadline: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                詳細説明
-              </label>
-              <textarea
-                value={newGoal.description}
-                onChange={(e) => setNewGoal({...newGoal, description: e.target.value})}
-                placeholder="目標の詳細な説明を入力してください...(任意)"
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                maxLength={200}
-              />
-            </div>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => {
-                  setShowAddForm(false);
-                  setNewGoal({
-                    title: '',
-                    description: '',
-                    category: 'WORK',
-                    deadline: '',
-                    icon: ''
-                  });
-                }}
-                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  console.log('追加ボタンがクリックされました');
-                  addGoal();
-                }}
-                disabled={!newGoal.title.trim()}
-                className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              >
-                追加
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* カルーセル表示（目標がある場合のみ） */}
-      {displayGoals.length > 0 && (
-        <div>
-          <div className="relative h-96 perspective-1000">
-            <div
-              className="carousel-container"
-              onMouseDown={handleDragStart}
-              onMouseMove={handleDrag}
-              onMouseUp={handleDragEnd}
-              onTouchStart={handleDragStart}
-              onTouchMove={handleDrag}
-              onTouchEnd={handleDragEnd}
-            >
-              <div
-                ref={carouselRef}
-                className="carousel"
-                style={{ transformStyle: 'preserve-3d' }}
-              >
-                {displayGoals.map((goal, index) => {
-                  const angle = anglePerCard * index;
-                  const isFlipped = flippedCards.has(goal.id);
+              {/* 説明 */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontFamily: "'Open Sans', sans-serif",
+                  fontSize: '12px',
+                  color: '#7e7e7e',
+                  letterSpacing: '2px',
+                  textTransform: 'uppercase',
+                  fontWeight: '600'
+                }}>
+                  Description
+                </label>
+                <textarea
+                  value={newGoal.description}
+                  onChange={(e) => setNewGoal({...newGoal, description: e.target.value})}
+                  placeholder="Describe your journey to success..."
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '1rem',
+                    border: '2px solid #f0f0f0',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    resize: 'vertical',
+                    lineHeight: '1.5',
+                    transition: '0.2s all ease',
+                    outline: 'none'
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#4d4dff';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#f0f0f0';
+                  }}
+                  maxLength={200}
+                />
+              </div>
+
+              {/* カテゴリと期限 */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '1rem',
+                marginBottom: '1rem'
+              }}>
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '0.5rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    fontSize: '12px',
+                    color: '#7e7e7e',
+                    letterSpacing: '2px',
+                    textTransform: 'uppercase',
+                    fontWeight: '600'
+                  }}>
+                    Category
+                  </label>
+                  <select
+                    value={newGoal.category}
+                    onChange={(e) => setNewGoal({...newGoal, category: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '2px solid #f0f0f0',
+                      borderRadius: '6px',
+                      fontSize: '0.9rem',
+                      fontFamily: "'Open Sans', sans-serif",
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="WORK">仕事</option>
+                    <option value="LEARNING">学習</option>
+                    <option value="HEALTH">健康</option>
+                    <option value="PERSONAL">個人</option>
+                    <option value="CAREER">キャリア</option>
+                    <option value="CREATIVE">創作</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '0.5rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    fontSize: '12px',
+                    color: '#7e7e7e',
+                    letterSpacing: '2px',
+                    textTransform: 'uppercase',
+                    fontWeight: '600'
+                  }}>
+                    Deadline
+                  </label>
+                  <input
+                    type="date"
+                    value={newGoal.deadline}
+                    onChange={(e) => setNewGoal({...newGoal, deadline: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '2px solid #f0f0f0',
+                      borderRadius: '6px',
+                      fontSize: '0.9rem',
+                      fontFamily: "'Open Sans', sans-serif",
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* ボタンテキスト */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontFamily: "'Open Sans', sans-serif",
+                  fontSize: '12px',
+                  color: '#7e7e7e',
+                  letterSpacing: '2px',
+                  textTransform: 'uppercase',
+                  fontWeight: '600'
+                }}>
+                  Action Button Text
+                </label>
+                <input
+                  type="text"
+                  value={newGoal.buttonText}
+                  onChange={(e) => setNewGoal({...newGoal, buttonText: e.target.value})}
+                  placeholder="Start working"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '2px solid #f0f0f0',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    transition: '0.2s all ease',
+                    outline: 'none'
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#4d4dff';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#f0f0f0';
+                  }}
+                  maxLength={30}
+                />
+              </div>
+
+              {/* 画像選択セクション */}
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontFamily: "'Open Sans', sans-serif",
+                  fontSize: '12px',
+                  color: '#7e7e7e',
+                  letterSpacing: '2px',
+                  textTransform: 'uppercase',
+                  fontWeight: '600'
+                }}>
+                  Goal Image
+                </label>
+                
+                {/* 画像選択ボタン */}
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowImageSelector(!showImageSelector)}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      background: showImageSelector ? '#4d4dff' : '#f8f9fa',
+                      color: showImageSelector ? 'white' : '#666',
+                      border: '2px solid ' + (showImageSelector ? '#4d4dff' : '#e9ecef'),
+                      borderRadius: '6px',
+                      fontSize: '0.9rem',
+                      fontFamily: "'Open Sans', sans-serif",
+                      cursor: 'pointer',
+                      transition: '0.2s all ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    🎨 プリセット画像から選択
+                  </button>
                   
-                  return (
-                    <div
-                      key={goal.id}
-                      className="goal-card"
-                      style={{
-                        transform: `rotateY(${angle}deg) translateZ(${radius}px)`,
+                  <label style={{
+                    cursor: 'pointer',
+                    padding: '0.75rem 1.5rem',
+                    background: '#f0f8ff',
+                    border: '2px solid #e6f3ff',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    transition: '0.2s all ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    📷 画像をアップロード
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        handleNewGoalImageSelect(e);
+                        setSelectedPresetImage(null);
                       }}
-                      onClick={() => flipCard(goal.id)}
-                    >
-                      <div className={`card-inner ${isFlipped ? 'flipped' : ''}`}>
-                        {/* Front of card */}
-                        <div className="card-front">
-                          <div className="p-6 h-full flex flex-col bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-lg shadow-xl border border-gray-100 dark:border-gray-700">
-                            <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold mb-4 ${getCategoryColor(goal.category)}`}
-                                 style={{ backgroundColor: getCategoryBgColor(goal.category) }}>
-                              {goal.category}
-                            </div>
-                            
-                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                              {goal.title}
-                            </h3>
-                            
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 flex-1 leading-relaxed">
-                              {goal.description.length > 60 ? 
-                                goal.description.substring(0, 60) + '...' : 
-                                goal.description
-                              }
-                            </p>
-                            
-                            {/* Progress bar */}
-                            <div className="mb-4">
-                              <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-medium text-gray-600 dark:text-gray-400">進捗</span>
-                                <span className="text-sm font-bold text-gray-900 dark:text-white">{goal.progress}%</span>
-                              </div>
-                              <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
-                                <div 
-                                  className={`h-3 rounded-full transition-all duration-500 relative ${getProgressColor(goal.progress, goal.status)}`}
-                                  style={{ width: `${goal.progress}%` }}
-                                >
-                                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer"></div>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 pt-3 border-t border-gray-100 dark:border-gray-700">
-                              <div className="flex items-center">
-                                <Calendar className="w-3 h-3 mr-1" />
-                                {new Date(goal.deadline).toLocaleDateString('ja-JP')}
-                              </div>
-                              {goal.status === 'completed' && (
-                                <CheckCircle className="w-4 h-4 text-green-500" />
-                              )}
-                            </div>
-                          </div>
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                </div>
+                
+                {/* プリセット画像セレクター */}
+                {showImageSelector && (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '1rem',
+                    marginBottom: '1rem',
+                    padding: '1rem',
+                    background: '#f8f9fa',
+                    borderRadius: '8px'
+                  }}>
+                    {PRESET_IMAGES.map((preset) => (
+                      <div
+                        key={preset.id}
+                        style={{
+                          position: 'relative',
+                          cursor: 'pointer',
+                          borderRadius: '6px',
+                          overflow: 'hidden',
+                          border: selectedPresetImage === preset.url ? '3px solid #4d4dff' : '3px solid transparent',
+                          transition: '0.2s all ease'
+                        }}
+                        onClick={() => {
+                          setSelectedPresetImage(preset.url);
+                          setNewGoal(prev => ({
+                            ...prev,
+                            images: [preset.url]
+                          }));
+                        }}
+                      >
+                        <img
+                          src={preset.url}
+                          alt={preset.name}
+                          style={{
+                            width: '100%',
+                            height: '100px',
+                            objectFit: 'cover'
+                          }}
+                        />
+                        <div style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
+                          color: 'white',
+                          padding: '0.5rem',
+                          fontSize: '0.75rem',
+                          fontFamily: "'Open Sans', sans-serif"
+                        }}>
+                          {preset.name}
                         </div>
-                        
-                        {/* Back of card */}
-                        <div className="card-back">
-                          <div className="p-6 h-full flex flex-col bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-lg shadow-xl border border-gray-100 dark:border-gray-700">
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3">
-                              {goal.title}
-                            </h3>
-                            
-                            <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-1 leading-relaxed">
-                              {goal.description}
-                            </p>
-                            
-                            <div className="space-y-3">
-                              <div className="flex items-center text-xs text-gray-500">
-                                <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-                                {goal.coordinates}
-                              </div>
-                              <div className="flex items-center text-xs text-gray-500">
-                                <Clock className="w-3 h-3 mr-2" />
-                                {goal.timeStamp}
-                              </div>
-                              
-                              {/* 進捗更新スライダー */}
-                              <div className="mt-4">
-                                <label className="block text-xs text-gray-500 mb-2">進捗を更新</label>
-                                <input
-                                  type="range"
-                                  min="0"
-                                  max="100"
-                                  value={goal.progress}
-                                  onChange={(e) => updateGoalProgress(goal.id, parseInt(e.target.value))}
-                                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                                />
-                                <div className="flex justify-between text-xs text-gray-400 mt-1">
-                                  <span>0%</span>
-                                  <span>{goal.progress}%</span>
-                                  <span>100%</span>
-                                </div>
-                              </div>
-                              
-                              {/* 削除ボタン */}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  e.preventDefault();
-                                  if (window.confirm('この目標を削除しますか？')) {
-                                    deleteGoal(goal.id);
-                                  }
-                                }}
-                                className="w-full mt-3 px-3 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 transition-colors cursor-pointer"
-                                type="button"
-                              >
-                                目標を削除
-                              </button>
-                            </div>
+                        {selectedPresetImage === preset.url && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '0.5rem',
+                            right: '0.5rem',
+                            width: '24px',
+                            height: '24px',
+                            background: '#4d4dff',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '14px'
+                          }}>
+                            ✓
                           </div>
-                        </div>
+                        )}
                       </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* 選択された画像のプレビュー */}
+                {newGoal.images.length > 0 && (
+                  <div style={{
+                    marginTop: '1rem',
+                    padding: '1rem',
+                    background: '#f8f9fa',
+                    borderRadius: '8px'
+                  }}>
+                    <div style={{
+                      fontSize: '0.8rem',
+                      color: '#666',
+                      marginBottom: '0.5rem',
+                      fontFamily: "'Open Sans', sans-serif"
+                    }}>
+                      選択された画像:
                     </div>
-                  );
-                })}
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                      <img
+                        src={newGoal.images[0]}
+                        alt="Goal visual"
+                        style={{
+                          width: '200px',
+                          height: '150px',
+                          objectFit: 'cover',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          setNewGoal(prev => ({ ...prev, images: [] }));
+                          setSelectedPresetImage(null);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '-8px',
+                          right: '-8px',
+                          width: '24px',
+                          height: '24px',
+                          background: '#ff4757',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '50%',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* ビデオアップロード（別セクション） */}
+                <div style={{ marginTop: '1rem' }}>
+                  <label style={{
+                    cursor: 'pointer',
+                    padding: '0.5rem 1rem',
+                    background: '#f0f8ff',
+                    border: '2px solid #e6f3ff',
+                    borderRadius: '6px',
+                    fontSize: '0.8rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    transition: '0.2s all ease',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    🎥 動画を追加 (オプション)
+                    <input
+                      type="file"
+                      multiple
+                      accept="video/*"
+                      onChange={handleNewGoalVideoSelect}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                  {newGoal.videos.length > 0 && (
+                    <span style={{
+                      marginLeft: '1rem',
+                      fontSize: '0.8rem',
+                      color: '#666',
+                      fontFamily: "'Open Sans', sans-serif"
+                    }}>
+                      {newGoal.videos.length} 動画
+                    </span>
+                  )}
+                </div>
+                
+                {/* ビデオプレビュー */}
+                {newGoal.videos.length > 0 && (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+                    gap: '0.5rem',
+                    marginTop: '0.5rem'
+                  }}>
+                    {newGoal.videos.map((video, index) => (
+                      <div key={`vid-${index}`} style={{ position: 'relative' }}>
+                        <video
+                          src={video}
+                          style={{
+                            width: '100%',
+                            height: '60px',
+                            objectFit: 'cover',
+                            borderRadius: '4px'
+                          }}
+                          muted
+                        />
+                        <div style={{
+                          position: 'absolute',
+                          top: '50%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          color: 'white',
+                          fontSize: '12px',
+                          pointerEvents: 'none'
+                        }}>
+                          ▶️
+                        </div>
+                        <button
+                          onClick={() => removeNewGoalVideo(index)}
+                          style={{
+                            position: 'absolute',
+                            top: '-5px',
+                            right: '-5px',
+                            width: '16px',
+                            height: '16px',
+                            background: '#ff4757',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            cursor: 'pointer',
+                            fontSize: '10px'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'flex-end', 
+                gap: '1rem',
+                marginTop: '2rem'
+              }}>
+                <button
+                  onClick={() => {
+                    setShowAddForm(false);
+                    setNewGoal({
+                      title: '',
+                      subtitle: '',
+                      description: '',
+                      category: 'WORK',
+                      deadline: '',
+                      buttonText: '',
+                      images: [],
+                      videos: []
+                    });
+                    setSelectedPresetImage(null);
+                    setShowImageSelector(false);
+                  }}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    border: '2px solid #e0e0e0',
+                    borderRadius: '6px',
+                    background: 'white',
+                    color: '#666',
+                    cursor: 'pointer',
+                    fontFamily: "'Open Sans', sans-serif",
+                    fontSize: '0.9rem',
+                    transition: '0.2s all ease'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addGoal}
+                  disabled={!newGoal.title.trim()}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    border: 'none',
+                    borderRadius: '6px',
+                    background: newGoal.title.trim() 
+                      ? 'linear-gradient(135deg, #4d4dff, #9333ea)' 
+                      : '#ccc',
+                    color: 'white',
+                    cursor: newGoal.title.trim() ? 'pointer' : 'not-allowed',
+                    fontFamily: "'Open Sans', sans-serif",
+                    fontSize: '0.9rem',
+                    fontWeight: '600',
+                    transition: '0.2s all ease'
+                  }}
+                >
+                  Create Goal
+                </button>
               </div>
             </div>
-            
-            {/* Navigation controls */}
-            <div className="carousel-controls">
-              <button
-                onClick={prevCard}
-                className="control-btn"
-                aria-label="前のカード"
-              >
-                ‹
-              </button>
-              <button
-                onClick={nextCard}
-                className="control-btn"
-                aria-label="次のカード"
-              >
-                ›
-              </button>
+          </div>
+        )}
+
+        {/* 完了した目標のセクション */}
+        {completedGoals.length > 0 && (
+          <div style={{ 
+            marginTop: '2rem',
+            textAlign: 'center' 
+          }}>
+            <h2 style={{ 
+              fontSize: '2rem', 
+              fontWeight: '300', 
+              color: '#2C2C2C', 
+              marginBottom: '1rem',
+              fontFamily: "'Playfair Display', serif"
+            }}>
+              Completed Goals
+            </h2>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: '1.5rem',
+              maxWidth: '1000px',
+              margin: '0 auto'
+            }}>
+              {completedGoals.map((goal) => (
+                <div
+                  key={goal.id}
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(34, 197, 94, 0.05))',
+                    border: '2px solid rgba(34, 197, 94, 0.2)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    position: 'relative',
+                    transition: '0.3s all ease',
+                    cursor: 'pointer'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 25px rgba(34, 197, 94, 0.15)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <div style={{
+                    position: 'absolute',
+                    top: '1rem',
+                    right: '1rem',
+                    width: '24px',
+                    height: '24px',
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '12px',
+                    fontWeight: 'bold'
+                  }}>
+                    ✓
+                  </div>
+                  
+                  <h3 style={{
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    color: '#2C2C2C',
+                    marginBottom: '0.5rem',
+                    fontFamily: "'Playfair Display', serif",
+                    paddingRight: '2rem'
+                  }}>
+                    {goal.title}
+                  </h3>
+                  
+                  <p style={{
+                    fontSize: '0.85rem',
+                    color: '#6b7280',
+                    marginBottom: '1rem',
+                    fontFamily: "'Open Sans', sans-serif",
+                    lineHeight: '1.4'
+                  }}>
+                    {goal.description}
+                  </p>
+                  
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <span style={{
+                      fontSize: '0.75rem',
+                      color: '#059669',
+                      fontFamily: "'Open Sans', sans-serif",
+                      fontWeight: '600',
+                      letterSpacing: '1px',
+                      textTransform: 'uppercase'
+                    }}>
+                      {getCategoryName(goal.category)}
+                    </span>
+                    <span style={{
+                      fontSize: '0.75rem',
+                      color: '#6b7280',
+                      fontFamily: "'Open Sans', sans-serif"
+                    }}>
+                      100% Complete
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-          
-          <div className="text-center mt-4">
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              カードをクリックして詳細を表示 • ドラッグまたは矢印で回転
-            </p>
-          </div>
-        </div>
-      )}
-
-      <style>{`
-        .perspective-1000 {
-          perspective: 1000px;
-        }
-        
-        .carousel-container {
-          position: relative;
-          width: 100%;
-          height: 100%;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          touch-action: none;
-        }
-        
-        .carousel {
-          position: relative;
-          width: 400px;
-          height: 400px;
-          transform-style: preserve-3d;
-          transition: transform 0.5s ease;
-        }
-        
-        .goal-card {
-          position: absolute;
-          width: 280px;
-          height: 380px;
-          left: 50%;
-          top: 50%;
-          margin-left: -140px;
-          margin-top: -190px;
-          transform-style: preserve-3d;
-          cursor: pointer;
-          transition: transform 0.3s ease;
-        }
-        
-        .goal-card:hover {
-          transform: scale(1.05) translateZ(420px);
-        }
-        
-        .card-inner {
-          position: relative;
-          width: 100%;
-          height: 100%;
-          transform-style: preserve-3d;
-          transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        
-        .card-inner.flipped {
-          transform: rotateY(180deg);
-        }
-        
-        .card-front,
-        .card-back {
-          position: absolute;
-          width: 100%;
-          height: 100%;
-          backface-visibility: hidden;
-          border-radius: 12px;
-        }
-        
-        .card-back {
-          transform: rotateY(180deg);
-        }
-        
-        .carousel-controls {
-          position: absolute;
-          bottom: -60px;
-          left: 50%;
-          transform: translateX(-50%);
-          display: flex;
-          gap: 20px;
-          z-index: 10;
-        }
-        
-        .control-btn {
-          width: 40px;
-          height: 40px;
-          border-radius: 50%;
-          background: white;
-          border: 2px solid #e5e7eb;
-          color: #6b7280;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          font-size: 18px;
-          font-weight: bold;
-          transition: all 0.3s ease;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .control-btn:hover {
-          background: #f3f4f6;
-          border-color: #d1d5db;
-          transform: scale(1.1);
-        }
-        
-        .stars-container {
-          width: 100%;
-          height: 100%;
-          background-image: 
-            radial-gradient(1px 1px at 25% 25%, #e5e7eb, rgba(0,0,0,0)),
-            radial-gradient(1px 1px at 50% 50%, #e5e7eb, rgba(0,0,0,0)),
-            radial-gradient(1px 1px at 75% 75%, #e5e7eb, rgba(0,0,0,0));
-          background-size: 200px 200px, 300px 300px, 400px 400px;
-          background-repeat: repeat;
-          animation: twinkle 15s linear infinite;
-        }
-        
-        @keyframes twinkle {
-          0% { background-position: 0 0, 0 0, 0 0; }
-          100% { background-position: 200px 200px, 300px 300px, 400px 400px; }
-        }
-        
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        
-        .animate-shimmer {
-          animation: shimmer 3s ease-out infinite;
-        }
-        
-        .slider::-webkit-slider-thumb {
-          appearance: none;
-          height: 16px;
-          width: 16px;
-          border-radius: 50%;
-          background: #3b82f6;
-          cursor: pointer;
-          box-shadow: 0 0 2px 0 #555;
-        }
-        
-        .slider::-moz-range-thumb {
-          width: 16px;
-          height: 16px;
-          border-radius: 50%;
-          background: #3b82f6;
-          cursor: pointer;
-          border: none;
-          box-shadow: 0 0 2px 0 #555;
-        }
-        
-        @media (max-width: 768px) {
-          .goal-card {
-            width: 240px;
-            height: 320px;
-            margin-left: -120px;
-            margin-top: -160px;
-          }
-          
-          .carousel {
-            width: 250px;
-            height: 250px;
-          }
-        }
-      `}</style>
-    </div>
+        )}
+      </div>
+    </>
   );
 };
 

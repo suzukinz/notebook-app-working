@@ -1,0 +1,219 @@
+{
+  "practicalAIStrategy": {
+    "description": "実用的なハイブリッドAI戦略",
+    "layers": {
+      "layer1_instant": {
+        "name": "即時レスポンス層",
+        "latency": "<500ms",
+        "models": [
+          {
+            "id": "llama3.2:1b",
+            "tasks": ["classification", "sentiment", "quick_answer"],
+            "maxRAM": "2GB",
+            "quality": "70%",
+            "examples": [
+              "ノート自動タグ付け",
+              "感情分析",
+              "Yes/No判定"
+            ]
+          },
+          {
+            "id": "distilbert-base",
+            "provider": "huggingface",
+            "tasks": ["text-classification"],
+            "maxRAM": "512MB",
+            "quality": "80%"
+          }
+        ]
+      },
+      "layer2_balanced": {
+        "name": "バランス層",
+        "latency": "1-3秒",
+        "models": [
+          {
+            "id": "llama3.2:3b",
+            "tasks": ["summarization", "generation", "translation"],
+            "maxRAM": "4GB",
+            "quality": "85%",
+            "examples": [
+              "ノート要約",
+              "文章改善提案",
+              "簡単な翻訳"
+            ]
+          },
+          {
+            "id": "deepseek-coder:1.3b",
+            "tasks": ["code_completion", "code_explanation"],
+            "maxRAM": "3GB",
+            "quality": "80%"
+          }
+        ]
+      },
+      "layer3_quality": {
+        "name": "高品質層（クラウド）",
+        "latency": "2-5秒",
+        "models": [
+          {
+            "id": "gpt-4o-mini",
+            "provider": "openai",
+            "tasks": ["complex_reasoning", "creative_writing", "deep_analysis"],
+            "cost": "$0.15/1M tokens",
+            "quality": "95%",
+            "examples": [
+              "複雑な文章生成",
+              "創造的な執筆",
+              "詳細な分析"
+            ]
+          }
+        ]
+      }
+    },
+    "routing_rules": {
+      "privacy_critical": {
+        "description": "機密データは必ずローカル",
+        "rule": "if (data.sensitivity === 'high') use layer1 || layer2",
+        "fallback": "error"
+      },
+      "speed_critical": {
+        "description": "リアルタイム処理",
+        "rule": "if (latency_requirement < 500ms) use layer1",
+        "fallback": "layer2"
+      },
+      "quality_critical": {
+        "description": "品質重視タスク",
+        "rule": "if (quality_requirement > 90%) use layer3",
+        "fallback": "layer2"
+      },
+      "cost_optimized": {
+        "description": "コスト最適化",
+        "rule": "try layer1 -> layer2 -> layer3",
+        "monthly_budget": "$10"
+      }
+    },
+    "hardware_recommendations": {
+      "minimum": {
+        "description": "最小構成（基本機能）",
+        "ram": "8GB",
+        "cpu": "4コア",
+        "storage": "10GB",
+        "supported_models": ["llama3.2:1b", "distilbert"],
+        "experience": "基本的なタグ付けと分類が可能"
+      },
+      "recommended": {
+        "description": "推奨構成（快適利用）",
+        "ram": "16GB",
+        "cpu": "8コア",
+        "storage": "20GB",
+        "gpu": "オプション",
+        "supported_models": ["llama3.2:1b", "llama3.2:3b", "deepseek-coder:1.3b"],
+        "experience": "ほぼすべての機能が快適に利用可能"
+      },
+      "optimal": {
+        "description": "最適構成（プロ向け）",
+        "ram": "32GB",
+        "cpu": "16コア",
+        "gpu": "8GB VRAM",
+        "storage": "50GB",
+        "supported_models": ["すべての7B以下のモデル"],
+        "experience": "高速処理と高品質な結果"
+      }
+    },
+    "practical_use_cases": {
+      "note_taking": {
+        "features": [
+          {
+            "name": "自動タグ付け",
+            "model": "llama3.2:1b",
+            "latency": "300ms",
+            "accuracy": "85%",
+            "実用性": "✅ 十分実用的"
+          },
+          {
+            "name": "要約生成",
+            "model": "llama3.2:3b",
+            "latency": "2秒",
+            "quality": "良好",
+            "実用性": "✅ 実用的"
+          },
+          {
+            "name": "文章改善",
+            "model": "llama3.2:3b",
+            "latency": "3秒",
+            "quality": "良好",
+            "実用性": "✅ 実用的"
+          },
+          {
+            "name": "関連ノート検索",
+            "model": "nomic-embed-text",
+            "latency": "100ms",
+            "accuracy": "90%",
+            "実用性": "✅ 非常に実用的"
+          }
+        ]
+      },
+      "coding": {
+        "features": [
+          {
+            "name": "コード補完",
+            "model": "deepseek-coder:1.3b",
+            "latency": "500ms",
+            "quality": "良好",
+            "実用性": "✅ 実用的"
+          },
+          {
+            "name": "エラー説明",
+            "model": "llama3.2:3b",
+            "latency": "2秒",
+            "quality": "良好",
+            "実用性": "✅ 実用的"
+          }
+        ]
+      }
+    },
+    "deployment_options": {
+      "single_user": {
+        "description": "個人利用",
+        "setup": "Docker Compose",
+        "models": ["llama3.2:1b", "llama3.2:3b"],
+        "ram_usage": "4-6GB",
+        "cost": "$0/月"
+      },
+      "small_team": {
+        "description": "小規模チーム（5-10人）",
+        "setup": "単一サーバー + Redis",
+        "models": ["llama3.2:3b", "deepseek-coder:1.3b"],
+        "ram_usage": "16GB",
+        "gpu": "推奨",
+        "cost": "$50/月（サーバー費用）"
+      },
+      "enterprise": {
+        "description": "エンタープライズ",
+        "setup": "Kubernetes + GPU nodes",
+        "models": ["mixtral-8x7b", "llama3.1:70b"],
+        "infrastructure": "専用GPUクラスター",
+        "cost": "$1000+/月"
+      }
+    },
+    "performance_tuning": {
+      "quantization": {
+        "description": "モデル量子化で50%メモリ削減",
+        "command": "ollama run llama3.2:3b-q4_0",
+        "tradeoff": "品質5-10%低下"
+      },
+      "gpu_acceleration": {
+        "description": "GPU使用で5-10倍高速化",
+        "requirement": "NVIDIA GPU (4GB+ VRAM)",
+        "setup": "CUDA 11.8+"
+      },
+      "caching": {
+        "description": "結果キャッシュで即時応答",
+        "technology": "Redis",
+        "hit_rate": "30-50%"
+      },
+      "batching": {
+        "description": "バッチ処理で効率化",
+        "improvement": "スループット2-3倍"
+      }
+    }
+  }
+}

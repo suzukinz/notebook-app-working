@@ -84,7 +84,7 @@ const VoiceInputWaveform: React.FC<VoiceInputWaveformProps> = ({
       const end = start + dataPerBar;
 
       for (let j = start; j < end && j < dataArrayRef.current.length; j++) {
-        sum += dataArrayRef.current[j];
+        sum += dataArrayRef.current[j] || 0;
       }
 
       const average = sum / dataPerBar;

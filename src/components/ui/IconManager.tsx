@@ -39,11 +39,13 @@ const IconManager: React.FC<IconManagerProps> = ({ isOpen, onClose }) => {
 
     for (let i = 0; i < previewSizes.length; i++) {
       const size = previewSizes[i];
+      if (!size) continue;
+      
       try {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         
-        if (ctx) {
+        if (ctx && size.width && size.height) {
           canvas.width = size.width;
           canvas.height = size.height;
 
@@ -52,8 +54,8 @@ const IconManager: React.FC<IconManagerProps> = ({ isOpen, onClose }) => {
             img.onload = () => {
               ctx.imageSmoothingEnabled = true;
               ctx.imageSmoothingQuality = 'high';
-              ctx.clearRect(0, 0, size.width, size.height);
-              ctx.drawImage(img, 0, 0, size.width, size.height);
+              ctx.clearRect(0, 0, size.width!, size.height!);
+              ctx.drawImage(img, 0, 0, size.width!, size.height!);
               
               const dataUrl = canvas.toDataURL('image/png');
               previewMap.set(size.name, dataUrl);
@@ -69,7 +71,7 @@ const IconManager: React.FC<IconManagerProps> = ({ isOpen, onClose }) => {
         
         setProgress(((i + 1) / previewSizes.length) * 100);
       } catch (error) {
-        console.error(`Failed to generate preview for ${size.name}:`, error);
+        console.error(`Failed to generate preview for ${size?.name}:`, error);
       }
     }
 
@@ -244,7 +246,9 @@ const IconManager: React.FC<IconManagerProps> = ({ isOpen, onClose }) => {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">📱 サイズプレビュー</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {Array.from(previewIcons.entries()).map(([sizeName, dataUrl]) => {
-              const [width, height] = sizeName.split('x').map(Number);
+              const [widthStr, heightStr] = sizeName.split('x');
+              const width = parseInt(widthStr || '0', 10) || 0;
+              const height = parseInt(heightStr || '0', 10) || 0;
               const iconSize = ICON_SIZES.find(size => size.width === width && size.height === height);
               
               return (

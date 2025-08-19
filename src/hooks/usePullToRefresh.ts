@@ -30,14 +30,20 @@ export const usePullToRefresh = ({
     const container = containerRef.current;
     if (!container || container.scrollTop > 0) return;
 
-    startY.current = e.touches[0].clientY;
+    const touch = e.touches[0];
+    if (!touch) return;
+    
+    startY.current = touch.clientY;
     setIsDragging(true);
   }, [enabled, isRefreshing]);
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
     if (!isDragging || !enabled || isRefreshing) return;
 
-    currentY.current = e.touches[0].clientY;
+    const touch = e.touches[0];
+    if (!touch) return;
+    
+    currentY.current = touch.clientY;
     const diff = currentY.current - startY.current;
 
     if (diff > 0) {

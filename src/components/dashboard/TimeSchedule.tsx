@@ -54,7 +54,7 @@ const TimeSchedule: React.FC<TimeScheduleProps> = ({ selectedDate }) => {
         endTime: newEvent.endTime,
         description: newEvent.description,
         color: getCategoryColor(newEvent.category),
-        date: currentDateKey,
+        date: currentDateKey!,
         category: newEvent.category
       };
       setEvents([...events, event]);
@@ -235,7 +235,7 @@ const TimeSchedule: React.FC<TimeScheduleProps> = ({ selectedDate }) => {
                 {/* この時間のイベントを表示 */}
                 {dayEvents
                   .filter(event => {
-                    const eventHour = parseInt(event.startTime.split(':')[0]);
+                    const eventHour = parseInt(event.startTime!.split(':')[0]!);
                     return eventHour === hour;
                   })
                   .map((event) => (
@@ -319,7 +319,7 @@ const TimeSchedule: React.FC<TimeScheduleProps> = ({ selectedDate }) => {
             <span>予定数: {dayEvents.length}件</span>
             <span>
               {dayEvents.length > 0 && 
-                `${formatTime(dayEvents[0].startTime)} - ${formatTime(dayEvents[dayEvents.length - 1].endTime)}`
+                `${formatTime(dayEvents[0]!.startTime!)} - ${formatTime(dayEvents[dayEvents.length - 1]!.endTime!)}`
               }
             </span>
           </div>

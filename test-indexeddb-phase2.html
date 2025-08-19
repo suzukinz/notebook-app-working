@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NoteSpace IndexedDB Phase 2 Test</title>
+    <style>
+        body { font-family: monospace; margin: 20px; background: #f0f0f0; }
+        .test-container { background: white; padding: 20px; border-radius: 8px; margin: 10px 0; }
+        .success { color: #22c55e; }
+        .error { color: #ef4444; }
+        .warning { color: #f59e0b; }
+        .info { color: #3b82f6; }
+        .test-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+        .test-result { margin: 5px 0; padding: 5px 10px; border-left: 4px solid #ccc; }
+        .test-result.success { border-color: #22c55e; background: #f0fdf4; }
+        .test-result.error { border-color: #ef4444; background: #fef2f2; }
+        .test-result.warning { border-color: #f59e0b; background: #fffbeb; }
+        .test-result.info { border-color: #3b82f6; background: #eff6ff; }
+        button { padding: 10px 20px; margin: 10px 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-success { background: #22c55e; color: white; }
+        .btn-warning { background: #f59e0b; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        #results { max-height: 500px; overflow-y: auto; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 10px 0; }
+        .stats-card { background: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6; }
+        .stats-number { font-size: 24px; font-weight: bold; color: #3b82f6; }
+    </style>
+</head>
+<body>
+    <h1>🗄️ NoteSpace IndexedDB Phase 2 Test</h1>
+    
+    <div class="test-container">
+        <div class="test-title">IndexedDB Data Persistence Test</div>
+        <button class="btn-primary" onclick="runAllTests()">Run All Tests</button>
+        <button class="btn-success" onclick="testCRUDOperations()">Test CRUD Operations</button>
+        <button class="btn-warning" onclick="testMigration()">Test Data Migration</button>
+        <button class="btn-danger" onclick="clearDatabase()">Clear Database</button>
+        <button class="btn-primary" onclick="clearResults()">Clear Results</button>
+    </div>
+
+    <div class="test-container">
+        <div class="test-title">Database Statistics</div>
+        <button class="btn-success" onclick="loadStats()">Load Statistics</button>
+        <div id="stats-container"></div>
+    </div>
+
+    <div id="results"></div>
+
+    <script type="module">
+        let results = document.getElementById('results');
+        let indexedDBManager;
+        let dataMigration;
+        
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.innerHTML = message;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        function clearResults() {
+            results.innerHTML = '';
+        }
+        
+        // Initialize modules
+        async function initModules() {
+            try {
+                // Try to import the modules (this will work when the React dev server is running)
+                const indexedDBModule = await import('./src/utils/indexedDBManager.ts');
+                const migrationModule = await import('./src/utils/dataMigration.ts');
+                
+                indexedDBManager = indexedDBModule.indexedDBManager;
+                dataMigration = migrationModule.dataMigration;
+                
+                log('✅ IndexedDB modules loaded successfully', 'success');
+                return true;
+            } catch (error) {
+                log(`❌ Failed to load modules: ${error.message}`, 'error');
+                log('ℹ️  Make sure the React dev server is running', 'info');
+                return false;
+            }
+        }
+        
+        async function runAllTests() {
+            clearResults();
+            log('🧪 Starting IndexedDB Phase 2 Test Suite...', 'info');
+            log('');
+            
+            const modulesLoaded = await initModules();
+            if (!modulesLoaded) {
+                log('⚠️  Cannot run tests without modules', 'warning');
+                return;
+            }
+            
+            await testDatabaseInit();
+            await testCRUDOperations();
+            await testMigration();
+            await loadStats();
+            
+            log('');
+            log('✅ Test suite completed!', 'success');
+        }
+        
+        async function testDatabaseInit() {
+            log('🔧 Testing Database Initialization...', 'info');
+            
+            try {
+                await indexedDBManager.initialize();
+                log('✅ IndexedDB initialized successfully', 'success');
+                
+                const stats = await indexedDBManager.getStats();
+                log(`   Database contains: ${stats.notes.total} notes, ${stats.workspaces.total} workspaces`, 'info');
+                
+            } catch (error) {
+                log(`❌ Database initialization failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testCRUDOperations() {
+            if (!indexedDBManager) {
+                await initModules();
+                await indexedDBManager.initialize();
+            }
+            
+            log('📝 Testing CRUD Operations...', 'info');
+            
+            try {
+                // Test workspace creation
+                const workspace = await indexedDBManager.createWorkspace({
+                    name: 'Test Workspace',
+                    icon: '🧪',
+                    color: '#3b82f6'
+                });
+                log('✅ Workspace created successfully', 'success');
+                
+                // Test note creation
+                const note = await indexedDBManager.createNote({
+                    workspaceId: workspace.id,
+                    notebookId: 'test-notebook',
+                    subFolderId: 'test-folder',
+                    title: 'Test Note',
+                    content: 'This is a test note created by Phase 2 test',
+                    tags: ['test', 'phase2']
+                });
+                log('✅ Note created successfully', 'success');
+                
+                // Test note update
+                await indexedDBManager.updateNote(note.id, {
+                    title: 'Updated Test Note',
+                    content: 'This note has been updated'
+                });
+                log('✅ Note updated successfully', 'success');
+                
+                // Test note retrieval
+                const retrievedNote = await indexedDBManager.getNote(note.id);
+                if (retrievedNote && retrievedNote.title === 'Updated Test Note') {
+                    log('✅ Note retrieved successfully', 'success');
+                } else {
+                    log('❌ Note retrieval failed', 'error');
+                }
+                
+                // Test settings
+                await indexedDBManager.setSetting('testKey', { value: 'testValue', timestamp: Date.now() });
+                const settingValue = await indexedDBManager.getSetting('testKey');
+                if (settingValue && settingValue.value === 'testValue') {
+                    log('✅ Settings CRUD working correctly', 'success');
+                } else {
+                    log('❌ Settings CRUD failed', 'error');
+                }
+                
+                // Test change tracking
+                const queuedChanges = await indexedDBManager.getQueuedChanges();
+                log(`✅ Change queue contains ${queuedChanges.length} changes`, 'success');
+                
+            } catch (error) {
+                log(`❌ CRUD operations failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testMigration() {
+            if (!dataMigration) {
+                await initModules();
+            }
+            
+            log('🔄 Testing Data Migration...', 'info');
+            
+            try {
+                const migrationNeeded = await dataMigration.isMigrationNeeded();
+                log(`   Migration needed: ${migrationNeeded}`, 'info');
+                
+                if (migrationNeeded) {
+                    const result = await dataMigration.migrateFromLocalStorage();
+                    if (result.success) {
+                        log(`✅ Migration completed: ${result.migratedNotes} notes, ${result.migratedWorkspaces} workspaces`, 'success');
+                    } else {
+                        log(`❌ Migration failed: ${result.errors.join(', ')}`, 'error');
+                    }
+                } else {
+                    log('ℹ️  No migration needed', 'info');
+                }
+                
+                // Test validation
+                const validation = await dataMigration.validateMigration();
+                if (validation.success) {
+                    log('✅ Migration validation passed', 'success');
+                } else {
+                    log(`⚠️  Migration validation issues: ${validation.issues.join(', ')}`, 'warning');
+                }
+                
+            } catch (error) {
+                log(`❌ Migration test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function loadStats() {
+            if (!indexedDBManager) {
+                await initModules();
+                await indexedDBManager.initialize();
+            }
+            
+            try {
+                const stats = await indexedDBManager.getStats();
+                
+                const statsContainer = document.getElementById('stats-container');
+                statsContainer.innerHTML = `
+                    <div class="stats-grid">
+                        <div class="stats-card">
+                            <div class="stats-number">${stats.notes.total}</div>
+                            <div>Total Notes</div>
+                            <small>${stats.notes.active} active, ${stats.notes.deleted} deleted</small>
+                        </div>
+                        <div class="stats-card">
+                            <div class="stats-number">${stats.workspaces.total}</div>
+                            <div>Total Workspaces</div>
+                            <small>${stats.workspaces.active} active, ${stats.workspaces.deleted} deleted</small>
+                        </div>
+                        <div class="stats-card">
+                            <div class="stats-number">${stats.settings.total}</div>
+                            <div>Settings</div>
+                            <small>${stats.settings.active} active</small>
+                        </div>
+                        <div class="stats-card">
+                            <div class="stats-number">${stats.changes.total}</div>
+                            <div>Pending Changes</div>
+                            <small>${stats.changes.queued} queued, ${stats.changes.error} errors</small>
+                        </div>
+                    </div>
+                `;
+                
+                log('📊 Database statistics loaded', 'success');
+                
+            } catch (error) {
+                log(`❌ Failed to load statistics: ${error.message}`, 'error');
+            }
+        }
+        
+        async function clearDatabase() {
+            if (confirm('Are you sure you want to clear the entire IndexedDB database? This cannot be undone.')) {
+                try {
+                    if (indexedDBManager) {
+                        await indexedDBManager.close();
+                    }
+                    
+                    // Delete the database
+                    const deleteRequest = indexedDB.deleteDatabase('NoteSpaceDB');
+                    deleteRequest.onsuccess = () => {
+                        log('✅ Database cleared successfully', 'success');
+                        indexedDBManager = null;
+                    };
+                    deleteRequest.onerror = () => {
+                        log('❌ Failed to clear database', 'error');
+                    };
+                    
+                } catch (error) {
+                    log(`❌ Database clear failed: ${error.message}`, 'error');
+                }
+            }
+        }
+        
+        // Auto-run basic tests when page loads
+        window.addEventListener('load', () => {
+            setTimeout(async () => {
+                log('🚀 Auto-running IndexedDB availability test...', 'info');
+                
+                if ('indexedDB' in window) {
+                    log('✅ IndexedDB is supported', 'success');
+                    
+                    try {
+                        const request = indexedDB.open('NoteSpaceDB-Test', 1);
+                        request.onsuccess = () => {
+                            log('✅ IndexedDB connection test successful', 'success');
+                            request.result.close();
+                        };
+                        request.onerror = () => {
+                            log('❌ IndexedDB connection test failed', 'error');
+                        };
+                    } catch (error) {
+                        log(`❌ IndexedDB test error: ${error.message}`, 'error');
+                    }
+                } else {
+                    log('❌ IndexedDB not supported in this browser', 'error');
+                }
+            }, 1000);
+        });
+        
+        // Make functions globally available
+        window.runAllTests = runAllTests;
+        window.testCRUDOperations = testCRUDOperations;
+        window.testMigration = testMigration;
+        window.loadStats = loadStats;
+        window.clearDatabase = clearDatabase;
+        window.clearResults = clearResults;
+    </script>
+</body>
+</html>

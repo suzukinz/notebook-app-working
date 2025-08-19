@@ -54,7 +54,7 @@ const TimeScheduleCompact: React.FC<TimeScheduleCompactProps> = ({ selectedDate 
         endTime: newEvent.endTime,
         description: newEvent.description,
         color: getCategoryColor(newEvent.category),
-        date: currentDateKey,
+        date: currentDateKey!,
         category: newEvent.category
       };
       setEvents([...events, event]);
@@ -234,10 +234,10 @@ const TimeScheduleCompact: React.FC<TimeScheduleCompactProps> = ({ selectedDate 
                 </div>
               ) : (
                 dayEvents.map((event, index) => {
-                  const startHour = parseInt(event.startTime.split(':')[0]);
-                  const startMinute = parseInt(event.startTime.split(':')[1]);
-                  const endHour = parseInt(event.endTime.split(':')[0]);
-                  const endMinute = parseInt(event.endTime.split(':')[1]);
+                  const startHour = parseInt(event.startTime!.split(':')[0]!);
+                  const startMinute = parseInt(event.startTime!.split(':')[1]!);
+                  const endHour = parseInt(event.endTime!.split(':')[0]!);
+                  const endMinute = parseInt(event.endTime!.split(':')[1]!);
                   
                   const startPercent = ((startHour * 60 + startMinute) / (24 * 60)) * 100;
                   const endPercent = ((endHour * 60 + endMinute) / (24 * 60)) * 100;
@@ -294,7 +294,7 @@ const TimeScheduleCompact: React.FC<TimeScheduleCompactProps> = ({ selectedDate 
             <span>{dayEvents.length}件の予定</span>
             {dayEvents.length > 0 && (
               <span>
-                {formatTime(dayEvents[0].startTime)} - {formatTime(dayEvents[dayEvents.length - 1].endTime)}
+                {formatTime(dayEvents[0]!.startTime!)} - {formatTime(dayEvents[dayEvents.length - 1]!.endTime!)}
               </span>
             )}
           </div>

@@ -1,17 +1,29 @@
+// Enhanced debounce with flush capability
+export interface DebouncedFunction<T extends (...args: any[]) => any> {
+  (...args: Parameters<T>): void;
+  flush(): void;
+  cancel(): void;
+}
+
 // Debounce utility functions
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number,
   immediate?: boolean
-): (...args: Parameters<T>) => void {
+): DebouncedFunction<T> {
   let timeout: NodeJS.Timeout | null = null;
+  let lastArgs: Parameters<T> | null = null;
 
-  return function executedFunction(...args: Parameters<T>) {
-    const later = () => {
-      timeout = null;
-      if (!immediate) func(...args);
-    };
+  const later = () => {
+    timeout = null;
+    if (!immediate && lastArgs) {
+      func(...lastArgs);
+      lastArgs = null;
+    }
+  };
 
+  const executedFunction = function(...args: Parameters<T>) {
+    lastArgs = args;
     const callNow = immediate && !timeout;
 
     if (timeout !== null) {
@@ -21,7 +33,30 @@ export function debounce<T extends (...args: any[]) => any>(
     timeout = setTimeout(later, wait);
 
     if (callNow) func(...args);
+  } as DebouncedFunction<T>;
+
+  // Flush function: execute immediately if pending
+  executedFunction.flush = function() {
+    if (timeout !== null) {
+      clearTimeout(timeout);
+      timeout = null;
+      if (!immediate && lastArgs) {
+        func(...lastArgs);
+        lastArgs = null;
+      }
+    }
   };
+
+  // Cancel function: clear timeout and pending args
+  executedFunction.cancel = function() {
+    if (timeout !== null) {
+      clearTimeout(timeout);
+      timeout = null;
+      lastArgs = null;
+    }
+  };
+
+  return executedFunction;
 }
 
 // Throttle utility function

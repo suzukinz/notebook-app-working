@@ -1,0 +1,341 @@
+import React, { memo, useMemo, useCallback, useRef, useEffect } from 'react';
+import type { ComponentType, ReactElement, RefObject } from 'react';
+
+// Performance monitoring utilities
+export class PerformanceMonitor {
+  private static markers = new Map<string, number>();
+  
+  static mark(name: string): void {
+    if (typeof performance !== 'undefined') {
+      const timestamp = performance.now();
+      this.markers.set(name, timestamp);
+      performance.mark(`${name}-start`);
+    }
+  }
+  
+  static measure(name: string): number | null {
+    if (typeof performance !== 'undefined') {
+      const startTime = this.markers.get(name);
+      if (startTime) {
+        const endTime = performance.now();
+        const duration = endTime - startTime;
+        performance.mark(`${name}-end`);
+        performance.measure(name, `${name}-start`, `${name}-end`);
+        this.markers.delete(name);
+        return duration;
+      }
+    }
+    return null;
+  }
+  
+  static clearMarkers(): void {
+    this.markers.clear();
+    if (typeof performance !== 'undefined') {
+      performance.clearMarks();
+      performance.clearMeasures();
+    }
+  }
+}
+
+// React component performance optimization utilities
+
+/**
+ * Enhanced memo with display name and performance tracking
+ */
+export const createMemoComponent = <P extends object>(
+  Component: ComponentType<P>,
+  propsAreEqual?: (prevProps: P, nextProps: P) => boolean,
+  displayName?: string
+): ComponentType<P> => {
+  const MemoComponent = memo(Component, propsAreEqual);
+  
+  if (displayName) {
+    MemoComponent.displayName = `Memo(${displayName})`;
+  }
+  
+  return MemoComponent;
+};
+
+/**
+ * Hook for stable callback references
+ */
+export const useStableCallback = <T extends (...args: any[]) => any>(
+  callback: T,
+  deps: React.DependencyList
+): T => {
+  const callbackRef = useRef<T>(callback);
+  
+  // Update ref when dependencies change
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, deps);
+  
+  // Return stable callback
+  return useCallback((...args: any[]) => {
+    return callbackRef.current(...args);
+  }, []) as T;
+};
+
+/**
+ * Hook for deep comparison memoization
+ */
+export const useDeepMemo = <T>(
+  factory: () => T,
+  deps: React.DependencyList
+): T => {
+  const depsRef = useRef<React.DependencyList>();
+  const valueRef = useRef<T>();
+  
+  // Deep compare dependencies
+  const depsChanged = !depsRef.current || 
+    depsRef.current.length !== deps.length ||
+    depsRef.current.some((dep, index) => {
+      const newDep = deps[index];
+      return typeof dep === 'object' && typeof newDep === 'object'
+        ? JSON.stringify(dep) !== JSON.stringify(newDep)
+        : dep !== newDep;
+    });
+  
+  if (depsChanged) {
+    depsRef.current = deps;
+    valueRef.current = factory();
+  }
+  
+  return valueRef.current!;
+};
+
+/**
+ * Hook for throttled values
+ */
+export const useThrottledValue = <T>(value: T, delay: number): T => {
+  const [throttledValue, setThrottledValue] = React.useState<T>(value);
+  const lastRan = useRef<number>(Date.now());
+  
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (Date.now() - lastRan.current >= delay) {
+        setThrottledValue(value);
+        lastRan.current = Date.now();
+      }
+    }, delay - (Date.now() - lastRan.current));
+    
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  
+  return throttledValue;
+};
+
+/**
+ * Hook for debounced values
+ */
+export const useDebouncedValue = <T>(value: T, delay: number): T => {
+  const [debouncedValue, setDebouncedValue] = React.useState<T>(value);
+  
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  
+  return debouncedValue;
+};
+
+/**
+ * Hook for intersection observer (lazy loading)
+ */
+export const useIntersectionObserver = (
+  ref: RefObject<Element>,
+  options: IntersectionObserverInit = {}
+): boolean => {
+  const [isIntersecting, setIsIntersecting] = React.useState(false);
+  
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    
+    const observer = new IntersectionObserver(([entry]) => {
+      setIsIntersecting(entry.isIntersecting);
+    }, options);
+    
+    observer.observe(element);
+    
+    return () => observer.disconnect();
+  }, [ref, options]);
+  
+  return isIntersecting;
+};
+
+/**
+ * Hook for virtual scrolling calculations
+ */
+export const useVirtualScrolling = (
+  items: any[],
+  itemHeight: number,
+  containerHeight: number,
+  scrollTop: number
+) => {
+  return useMemo(() => {
+    const totalHeight = items.length * itemHeight;
+    const visibleStart = Math.floor(scrollTop / itemHeight);
+    const visibleEnd = Math.min(
+      visibleStart + Math.ceil(containerHeight / itemHeight) + 1,
+      items.length
+    );
+    
+    const visibleItems = items.slice(visibleStart, visibleEnd);
+    const offsetY = visibleStart * itemHeight;
+    
+    return {
+      totalHeight,
+      visibleItems,
+      offsetY,
+      visibleStart,
+      visibleEnd
+    };
+  }, [items, itemHeight, containerHeight, scrollTop]);
+};
+
+/**
+ * HOC for performance tracking
+ */
+export const withPerformanceTracking = <P extends object>(
+  Component: ComponentType<P>,
+  componentName?: string
+) => {
+  const TrackedComponent: ComponentType<P> = (props) => {
+    const name = componentName || Component.displayName || Component.name || 'Component';
+    
+    useEffect(() => {
+      PerformanceMonitor.mark(`${name}-mount`);
+      return () => {
+        PerformanceMonitor.measure(`${name}-mount`);
+      };
+    }, []);
+    
+    useEffect(() => {
+      PerformanceMonitor.mark(`${name}-render`);
+      PerformanceMonitor.measure(`${name}-render`);
+    });
+    
+    return <Component {...props} />;
+  };
+  
+  TrackedComponent.displayName = `withPerformanceTracking(${componentName || Component.displayName || Component.name})`;
+  
+  return TrackedComponent;
+};
+
+/**
+ * Component for lazy rendering
+ */
+interface LazyRenderProps {
+  children: ReactElement;
+  fallback?: ReactElement;
+  threshold?: number;
+  rootMargin?: string;
+}
+
+export const LazyRender: React.FC<LazyRenderProps> = ({
+  children,
+  fallback = <div>Loading...</div>,
+  threshold = 0.1,
+  rootMargin = '50px'
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const isVisible = useIntersectionObserver(ref, {
+    threshold,
+    rootMargin
+  });
+  
+  return (
+    <div ref={ref}>
+      {isVisible ? children : fallback}
+    </div>
+  );
+};
+
+/**
+ * Hook for component render counting (development only)
+ */
+export const useRenderCount = (componentName: string): number => {
+  const renderCount = useRef(0);
+  
+  if (process.env.NODE_ENV === 'development') {
+    renderCount.current += 1;
+    console.log(`${componentName} rendered ${renderCount.current} times`);
+  }
+  
+  return renderCount.current;
+};
+
+/**
+ * Cache for expensive computations
+ */
+class ComputationCache {
+  private cache = new Map<string, any>();
+  private maxSize: number;
+  
+  constructor(maxSize = 100) {
+    this.maxSize = maxSize;
+  }
+  
+  get<T>(key: string): T | undefined {
+    return this.cache.get(key);
+  }
+  
+  set<T>(key: string, value: T): void {
+    if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(key, value);
+  }
+  
+  clear(): void {
+    this.cache.clear();
+  }
+  
+  size(): number {
+    return this.cache.size;
+  }
+}
+
+export const computationCache = new ComputationCache();
+
+/**
+ * Hook for cached computations
+ */
+export const useCachedComputation = <T>(
+  key: string,
+  computation: () => T,
+  deps: React.DependencyList
+): T => {
+  return useMemo(() => {
+    const cached = computationCache.get<T>(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    
+    const result = computation();
+    computationCache.set(key, result);
+    return result;
+  }, deps);
+};
+
+export default {
+  PerformanceMonitor,
+  createMemoComponent,
+  useStableCallback,
+  useDeepMemo,
+  useThrottledValue,
+  useDebouncedValue,
+  useIntersectionObserver,
+  useVirtualScrolling,
+  withPerformanceTracking,
+  LazyRender,
+  useRenderCount,
+  computationCache,
+  useCachedComputation
+};

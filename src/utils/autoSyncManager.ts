@@ -5,6 +5,7 @@ import { NotebookState } from '../types';
 import { userIdentityManager } from './userIdentity';
 import { useNotebookStore } from '../store/useNotebookStore';
 import { conflictResolver, ConflictInfo } from './conflictResolver';
+import { syncStateManager } from './syncStateManager';
 
 export interface SyncDevice {
   deviceId: string;
@@ -38,7 +39,6 @@ export interface ConflictResolution {
 class AutoSyncManager {
   private static instance: AutoSyncManager;
   private isEnabled: boolean = false;
-  private isApplyingRemoteChange: boolean = false;
   private devices: Map<string, SyncDevice> = new Map();
   private websockets: Map<string, WebSocket> = new Map();
   private lastStateSnapshot: NotebookState | null = null;
@@ -379,9 +379,9 @@ class AutoSyncManager {
       applyPatch(newState, operation.patches);
       
       // ストアを更新（ただし、ブロードキャストは無効化）
-      this.isApplyingRemoteChange = true;
+      syncStateManager.setSyncFlag('isApplyingRemoteChange', true);
       useNotebookStore.setState(newState);
-      this.isApplyingRemoteChange = false;
+      syncStateManager.setSyncFlag('isApplyingRemoteChange', false);
       
       logger.info(`Applied ${operation.patches.length} patches from remote`);
     } catch (error) {
@@ -424,10 +424,10 @@ class AutoSyncManager {
       
       if (resolution.success && resolution.mergedData) {
         // 成功した場合、マージされたデータを適用
-        this.isApplyingRemoteChange = true;
+        syncStateManager.setSyncFlag('isApplyingRemoteChange', true);
         const { updateNote } = useNotebookStore.getState();
         updateNote(noteId, resolution.mergedData);
-        this.isApplyingRemoteChange = false;
+        syncStateManager.setSyncFlag('isApplyingRemoteChange', false);
         
         logger.info(`Applied merged note update for note ${noteId}`);
       } else if (resolution.requiresManualResolution) {
@@ -435,16 +435,16 @@ class AutoSyncManager {
         logger.warn(`Manual conflict resolution required for note ${noteId}`);
         
         // 競合マーカー付きでデータを適用
-        this.isApplyingRemoteChange = true;
+        syncStateManager.setSyncFlag('isApplyingRemoteChange', true);
         const { updateNote } = useNotebookStore.getState();
         updateNote(noteId, resolution.mergedData || updates);
-        this.isApplyingRemoteChange = false;
+        syncStateManager.setSyncFlag('isApplyingRemoteChange', false);
       } else {
         // 解決失敗の場合、リモート版を適用
-        this.isApplyingRemoteChange = true;
+        syncStateManager.setSyncFlag('isApplyingRemoteChange', true);
         const { updateNote } = useNotebookStore.getState();
         updateNote(noteId, updates);
-        this.isApplyingRemoteChange = false;
+        syncStateManager.setSyncFlag('isApplyingRemoteChange', false);
         
         logger.info(`Applied remote note update for note ${noteId}`);
       }
@@ -462,10 +462,10 @@ class AutoSyncManager {
     }
 
     try {
-      this.isApplyingRemoteChange = true;
+      syncStateManager.setSyncFlag('isApplyingRemoteChange', true);
       const { addSubFolder } = useNotebookStore.getState();
       addSubFolder(notebookId, subFolder);
-      this.isApplyingRemoteChange = false;
+      syncStateManager.setSyncFlag('isApplyingRemoteChange', false);
       
       logger.info(`Applied folder creation: ${subFolder.name}`);
     } catch (error) {
@@ -482,10 +482,10 @@ class AutoSyncManager {
     }
 
     try {
-      this.isApplyingRemoteChange = true;
+      syncStateManager.setSyncFlag('isApplyingRemoteChange', true);
       const { addWorkspace } = useNotebookStore.getState();
       addWorkspace(workspace);
-      this.isApplyingRemoteChange = false;
+      syncStateManager.setSyncFlag('isApplyingRemoteChange', false);
       
       logger.info(`Applied workspace creation: ${workspace.name}`);
     } catch (error) {
@@ -495,7 +495,7 @@ class AutoSyncManager {
 
   // 状態変更を他のデバイスにブロードキャスト
   public broadcastStateChange(currentState: NotebookState): void {
-    if (!this.isEnabled || this.websockets.size === 0 || this.isApplyingRemoteChange) return;
+    if (!this.isEnabled || this.websockets.size === 0 || syncStateManager.getSyncFlags().isApplyingRemoteChange) return;
 
     const operation: SyncOperation = {
       id: nanoid(),
@@ -555,9 +555,9 @@ class AutoSyncManager {
           }
           
           // 競合なしの場合、そのまま状態を適用
-          this.isApplyingRemoteChange = true;
+          syncStateManager.setSyncFlag('isApplyingRemoteChange', true);
           useNotebookStore.setState(syncData);
-          this.isApplyingRemoteChange = false;
+          syncStateManager.setSyncFlag('isApplyingRemoteChange', false);
           
           logger.info('Applied sync data from HTTP API');
         }
@@ -660,7 +660,7 @@ class AutoSyncManager {
 
   // 個別操作のブロードキャスト用メソッド
   public broadcastNoteUpdate(noteId: number, updates: any): void {
-    if (!this.isEnabled || this.websockets.size === 0 || this.isApplyingRemoteChange) return;
+    if (!this.isEnabled || this.websockets.size === 0 || syncStateManager.getSyncFlags().isApplyingRemoteChange) return;
 
     const operation: SyncOperation = {
       id: nanoid(),
@@ -674,7 +674,7 @@ class AutoSyncManager {
   }
 
   public broadcastFolderCreate(notebookId: string, subFolder: any): void {
-    if (!this.isEnabled || this.websockets.size === 0 || this.isApplyingRemoteChange) return;
+    if (!this.isEnabled || this.websockets.size === 0 || syncStateManager.getSyncFlags().isApplyingRemoteChange) return;
 
     const operation: SyncOperation = {
       id: nanoid(),
@@ -688,7 +688,7 @@ class AutoSyncManager {
   }
 
   public broadcastWorkspaceAdd(workspace: any): void {
-    if (!this.isEnabled || this.websockets.size === 0 || this.isApplyingRemoteChange) return;
+    if (!this.isEnabled || this.websockets.size === 0 || syncStateManager.getSyncFlags().isApplyingRemoteChange) return;
 
     const operation: SyncOperation = {
       id: nanoid(),
@@ -741,9 +741,9 @@ class AutoSyncManager {
               if (!resolvedState.notesData[subFolderId]) {
                 resolvedState.notesData[subFolderId] = [];
               }
-              const noteIndex = resolvedState.notesData[subFolderId].findIndex(n => n.id === remoteNote.id);
+              const noteIndex = resolvedState.notesData[subFolderId]!.findIndex(n => n.id === remoteNote.id);
               if (noteIndex >= 0) {
-                resolvedState.notesData[subFolderId][noteIndex] = resolution.mergedData;
+                resolvedState.notesData[subFolderId]![noteIndex] = resolution.mergedData;
               }
             } else if (resolution.conflicts) {
               hasConflicts = true;
@@ -753,7 +753,7 @@ class AutoSyncManager {
             if (!resolvedState.notesData[subFolderId]) {
               resolvedState.notesData[subFolderId] = [];
             }
-            resolvedState.notesData[subFolderId].push(remoteNote);
+            resolvedState.notesData[subFolderId]!.push(remoteNote);
           }
         });
       });
@@ -781,9 +781,9 @@ class AutoSyncManager {
       }
 
       // 解決された状態を適用
-      this.isApplyingRemoteChange = true;
+      syncStateManager.setSyncFlag('isApplyingRemoteChange', true);
       useNotebookStore.setState(resolvedState);
-      this.isApplyingRemoteChange = false;
+      syncStateManager.setSyncFlag('isApplyingRemoteChange', false);
       
       if (hasConflicts) {
         logger.warn('State merge completed with conflicts requiring manual resolution');
@@ -796,12 +796,12 @@ class AutoSyncManager {
       // エラーの場合は従来通り時刻比較でフォールバック
       const useRemote = remoteTimestamp > Date.now() - 30000; // 30秒以内なら新しいとみなす
       
-      this.isApplyingRemoteChange = true;
+      syncStateManager.setSyncFlag('isApplyingRemoteChange', true);
       if (useRemote) {
         useNotebookStore.setState(remoteState);
         logger.info('Applied remote state due to conflict resolution error');
       }
-      this.isApplyingRemoteChange = false;
+      syncStateManager.setSyncFlag('isApplyingRemoteChange', false);
     }
   }
 

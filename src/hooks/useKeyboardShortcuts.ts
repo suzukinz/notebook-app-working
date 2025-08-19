@@ -8,6 +8,7 @@ interface KeyboardShortcut {
   meta?: boolean;
   action: () => void;
   description: string;
+  disabled?: boolean;
 }
 
 export const useKeyboardShortcuts = (shortcuts: KeyboardShortcut[]) => {
@@ -20,12 +21,15 @@ export const useKeyboardShortcuts = (shortcuts: KeyboardShortcut[]) => {
         return;
       }
 
-      shortcuts.forEach(({ key, ctrl, alt, shift, meta, action }) => {
+      shortcuts.forEach(({ key, ctrl, alt, shift, meta, action, disabled }) => {
+        // Skip disabled shortcuts
+        if (disabled) return;
+
         // 修飾キーの正しい判定ロジック
-        const isCtrlMatch = ctrl === undefined ? true : (ctrl ? event.ctrlKey : !event.ctrlKey);
-        const isAltMatch = alt === undefined ? true : (alt ? event.altKey : !event.altKey);
-        const isShiftMatch = shift === undefined ? true : (shift ? event.shiftKey : !event.shiftKey);
-        const isMetaMatch = meta === undefined ? true : (meta ? event.metaKey : !event.metaKey);
+        const isCtrlMatch = ctrl === undefined ? !event.ctrlKey : (ctrl ? event.ctrlKey : !event.ctrlKey);
+        const isAltMatch = alt === undefined ? !event.altKey : (alt ? event.altKey : !event.altKey);
+        const isShiftMatch = shift === undefined ? !event.shiftKey : (shift ? event.shiftKey : !event.shiftKey);
+        const isMetaMatch = meta === undefined ? !event.metaKey : (meta ? event.metaKey : !event.metaKey);
 
         if (
           event.key.toLowerCase() === key.toLowerCase() &&

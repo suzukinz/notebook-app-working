@@ -11,7 +11,7 @@ const ActivityChart: React.FC<ActivityChartProps> = ({ data }) => {
   const getDayName = (dateString: string): string => {
     const date = new Date(dateString);
     const days = ['日', '月', '火', '水', '木', '金', '土'];
-    return days[date.getDay()];
+    return days[date.getDay()] || '日';
   };
 
   const getBarColor = (activity: number): string => {

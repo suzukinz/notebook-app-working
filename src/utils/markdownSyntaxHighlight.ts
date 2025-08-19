@@ -56,7 +56,14 @@ export class MarkdownSyntaxHighlighter {
       );
 
       if (!isOverlapping) {
-        tokens.push({ type, content, start, end, level, language });
+        tokens.push({ 
+          type, 
+          content, 
+          start, 
+          end, 
+          ...(level !== undefined && { level }),
+          ...(language !== undefined && { language })
+        });
         processedRanges.push({ start, end });
       }
     };
@@ -64,7 +71,7 @@ export class MarkdownSyntaxHighlighter {
     // 見出しの処理
     let match;
     while ((match = this.patterns.heading.exec(text)) !== null) {
-      const level = match[1].length;
+      const level = match[1]!.length;
       addToken('heading', match[0], match.index, match.index + match[0].length, level);
     }
 
@@ -221,7 +228,7 @@ export class MarkdownSyntaxHighlighter {
 
     const [, detectedLang, code] = codeBlockMatch;
     const actualLanguage = detectedLang || language;
-    const highlightedCode = CodeHighlighter.highlightCode(code, actualLanguage);
+    const highlightedCode = CodeHighlighter.highlightCode(code || '', actualLanguage);
     
     return `<span class="block bg-gray-100 dark:bg-gray-800 p-3 rounded font-mono text-sm border-l-4 border-blue-500">
       <span class="text-xs text-gray-500 dark:text-gray-400 mb-2 block">${actualLanguage}</span>

@@ -33,13 +33,13 @@ export interface SubFolder {
 }
 
 export interface Page {
-  id: number;
+  id: string; // ✅ ID統一修正: number → string
   title: string;
   content: string;
 }
 
 export interface Note {
-  id: number;
+  id: string; // ✅ ID統一修正: number → string
   title: string;
   tags: string[];
   createdAt: string;
@@ -79,7 +79,9 @@ export interface NotebookState {
   // 検索・フィルタ
   searchQuery: string;
   selectedTags: string[];
-  viewMode: 'list' | 'grid';
+  listViewMode: 'list' | 'grid';
+  showNoteList: boolean;
+  sidebarExpanded: boolean;
   
   // 展開状態
   expandedNotebooks: string[];
@@ -88,6 +90,7 @@ export interface NotebookState {
   // マインドマップ
   showMindMap: boolean;
   showDashboard: boolean;
+  viewMode: 'home' | 'notes' | 'dashboard';
   mindMapZoom: number;
   mindMapLevel: 'workspace' | 'notebook' | 'subfolder' | 'note';
   mindMapFocus: string | null;
@@ -134,7 +137,9 @@ export interface NotebookActions {
   // 検索・フィルタ
   setSearchQuery: (query: string) => void;
   setSelectedTags: (tags: string[]) => void;
-  setViewMode: (mode: 'list' | 'grid') => void;
+  setListViewMode: (mode: 'list' | 'grid') => void;
+  setShowNoteList: (show: boolean) => void;
+  setSidebarExpanded: (expanded: boolean) => void;
   
   // 展開状態
   toggleNotebookExpanded: (notebook: string) => void;
@@ -143,6 +148,7 @@ export interface NotebookActions {
   // マインドマップ
   setShowMindMap: (show: boolean) => void;
   setShowDashboard: (show: boolean) => void;
+  setViewMode: (mode: 'home' | 'notes' | 'dashboard') => void;
   setMindMapZoom: (zoom: number) => void;
   setMindMapLevel: (level: 'workspace' | 'notebook' | 'subfolder' | 'note') => void;
   setMindMapFocus: (focus: string | null) => void;
@@ -153,10 +159,10 @@ export interface NotebookActions {
   setPreviewPage: (page: number) => void;
   
   // データ更新
-  updateNote: (noteId: number, updates: Partial<Note>) => void;
+  updateNote: (noteId: string, updates: Partial<Note>) => Promise<void>;
   addNote: (subFolderId: string, note: Omit<Note, 'id'>) => void;
   addNoteToSubFolder: (subFolderId: string, editorType?: 'rich' | 'markdown') => void;
-  deleteNote: (noteId: number) => void;
+  deleteNote: (noteId: string) => void;
   addSubFolder: (notebookId: string, subFolder: Omit<SubFolder, 'id'>) => void;
   deleteSubFolder: (subFolderId: string) => void;
   deleteNotebook: (notebookId: string) => void;
@@ -204,6 +210,10 @@ export const COLORS = [
 // 表示モード
 export const VIEW_MODES = ['list', 'grid'] as const;
 export type ViewMode = typeof VIEW_MODES[number];
+
+// アプリビューモード
+export const APP_VIEW_MODES = ['home', 'notes', 'dashboard'] as const;
+export type AppViewMode = typeof APP_VIEW_MODES[number];
 
 // マインドマップレベル
 export const MINDMAP_LEVELS = ['workspace', 'notebook', 'subfolder', 'note'] as const;

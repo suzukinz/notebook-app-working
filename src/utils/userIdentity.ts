@@ -322,7 +322,7 @@ class UserIdentityManager {
   // アバター（絵文字）を生成
   private generateAvatar(): string {
     const avatars = ['👤', '🧑', '👨', '👩', '🧑‍💻', '👨‍💻', '👩‍💻', '🧑‍🎨', '👨‍🎨', '👩‍🎨', '📝', '💡', '🎨', '📚', '🗂️', '📋'];
-    return avatars[Math.floor(Math.random() * avatars.length)];
+    return avatars[Math.floor(Math.random() * avatars.length)] || '👤';
   }
 
   // 同期キーを生成（16文字の英数字）

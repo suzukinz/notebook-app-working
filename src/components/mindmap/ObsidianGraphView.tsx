@@ -143,7 +143,7 @@ const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({ className = '' })
     }
     
     return { x: 0, y: 0 };
-  }, [viewMode, selectedWorkspace, selectedNotebook, selectedSubFolder, simulationRef.current.length]);
+  }, [viewMode, selectedWorkspace, selectedNotebook, selectedSubFolder]);
 
   // ユーザーが移動したノードの位置を適用するヘルパー関数
   const applyUserPosition = useCallback((node: GraphNode): GraphNode => {
@@ -274,7 +274,7 @@ const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({ className = '' })
       });
 
     return { nodes, connections };
-  }, [workspaces, notebooks, subFoldersData, notesData, applyUserPosition]);
+  }, [workspaces, notebooks, subFoldersData, notesData, applyUserPosition, selectedWorkspace, selectedNotebook, selectedSubFolder, viewMode]);
 
   // 初期配置の設定（アニメーションなし）
   useEffect(() => {
@@ -284,7 +284,7 @@ const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({ className = '' })
     if (simulationRef.current.length === 0) {
       simulationRef.current = [...graphData.nodes];
     }
-  }, []); // 初回のみ実行
+  }, [graphData.nodes]); // graphData.nodes が変更されたときに実行
 
   // レイアウトをローカルストレージから読み込み
   useEffect(() => {
@@ -354,7 +354,7 @@ const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({ className = '' })
         vy: 0
       };
     });
-  }, [graphData.nodes.length, viewMode]);
+  }, [graphData.nodes, viewMode]);
 
   // ノードクリックハンドラー
   const handleNodeClick = useCallback((node: GraphNode) => {
@@ -431,7 +431,7 @@ const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({ className = '' })
         setMindMapZoom(3.0);
       }
     }
-  }, [viewMode, setSelectedWorkspace, setSelectedNotebook, setSelectedSubFolder, setSelectedNote, setPreviewNote, notebooks, subFoldersData, notesData, dragDistance, isMobile, setMobileViewMode, setViewMode]);
+  }, [viewMode, setSelectedWorkspace, setSelectedNotebook, setSelectedSubFolder, setSelectedNote, setPreviewNote, notebooks, subFoldersData, notesData, dragDistance, isMobile, setMobileViewMode, setViewMode, setMindMapZoom]);
 
   // ドラッグハンドラー
   const handleMouseDown = useCallback((e: React.MouseEvent, node: GraphNode) => {
@@ -604,7 +604,9 @@ const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({ className = '' })
         e.preventDefault();
         if (isKeyboardMode && visibleNodes[keyboardSelectedIndex]) {
           const selectedNode = visibleNodes[keyboardSelectedIndex];
-          handleNodeClick(selectedNode);
+          if (selectedNode) {
+            handleNodeClick(selectedNode);
+          }
         }
         break;
       case 'Escape':
@@ -732,7 +734,7 @@ const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({ className = '' })
   // モバイル版の場合は切り替え表示
   if (isMobile) {
     return (
-      <div className={`fixed inset-0 bg-gray-900 z-[99999] ${className}`}>
+      <div className={`fixed inset-0 bg-gray-900 z-40 ${className}`} style={{ left: '48px' }}>
         <div className="h-full flex flex-col">
           {/* モバイル用ヘッダー */}
           <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-900">
@@ -956,7 +958,7 @@ const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({ className = '' })
 
   // デスクトップ版は従来通り
   return (
-    <div className={`fixed inset-0 bg-gray-900 z-[99999] ${className}`}>
+    <div className={`fixed inset-0 bg-gray-900 z-40 ${className}`} style={{ left: '48px' }}>
       <div 
         className="absolute inset-0 flex"
         style={{ flexDirection: containerStyles.flexDirection }}

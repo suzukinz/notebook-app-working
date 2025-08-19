@@ -138,7 +138,7 @@ export const useInfiniteScroll = <T,>({
       observerRef.current = new IntersectionObserver(
         (entries) => {
           const target = entries[0];
-          if (target.isIntersecting && !loadingRef.current) {
+          if (target && target.isIntersecting && !loadingRef.current) {
             loadMore();
           }
         },

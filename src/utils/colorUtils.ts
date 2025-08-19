@@ -15,17 +15,33 @@ export interface ContrastResult {
 
 // HEXからRGBに変換
 export const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  // #を除去
+  hex = hex.replace(/^#/, '');
+  
+  // 3桁の短縮形を6桁に展開
+  if (hex.length === 3) {
+    hex = hex.split('').map(char => char + char).join('');
+  }
+  
+  // 6桁の形式をチェック
+  const result = /^([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
+    r: parseInt(result[1]!, 16),
+    g: parseInt(result[2]!, 16),
+    b: parseInt(result[3]!, 16)
   } : null;
 };
 
 // RGBからHEXに変換
 export const rgbToHex = (r: number, g: number, b: number): string => {
-  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+  // 小数値を整数に変換し、0-255の範囲にクランプ
+  r = Math.round(Math.max(0, Math.min(255, r)));
+  g = Math.round(Math.max(0, Math.min(255, g)));
+  b = Math.round(Math.max(0, Math.min(255, b)));
+  
+  // 各成分を16進数に変換し、2桁にパディング
+  const hex = ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+  return '#' + hex.toUpperCase();
 };
 
 // 相対輝度を計算
@@ -200,4 +216,80 @@ export const simulateColorBlindness = (hex: string, type: 'protanopia' | 'deuter
     Math.round(g * 255),
     Math.round(b * 255)
   );
+};
+
+// HEXカラーの有効性を検証
+export const isValidHexColor = (hex: string): boolean => {
+  const cleanHex = hex.replace(/^#/, '');
+  return /^([a-f\d]{3}|[a-f\d]{6})$/i.test(cleanHex);
+};
+
+// 背景色に対して適切なコントラストの色を返す
+export const getContrastColor = (backgroundColor: string): string => {
+  const rgb = hexToRgb(backgroundColor);
+  if (!rgb) return '#000000';
+
+  const luminance = getLuminance(rgb.r, rgb.g, rgb.b);
+  
+  // 明度が0.5以上の場合は黒、それ以下の場合は白を返す
+  return luminance > 0.5 ? '#000000' : '#FFFFFF';
+};
+
+// 色のバリエーションを生成
+export const generateColorVariants = (baseColor: string): {
+  lighter: string;
+  darker: string;
+  muted: string;
+  bright: string;
+} => {
+  const rgb = hexToRgb(baseColor);
+  
+  // 無効な色の場合はデフォルト値を返す
+  if (!rgb) {
+    return {
+      lighter: '#FFFFFF',
+      darker: '#000000',
+      muted: '#808080',
+      bright: '#FF0000'
+    };
+  }
+
+  const { r, g, b } = rgb;
+
+  // より明るい色 (20%明度アップ)
+  const lighter = rgbToHex(
+    Math.min(255, Math.round(r + (255 - r) * 0.2)),
+    Math.min(255, Math.round(g + (255 - g) * 0.2)),
+    Math.min(255, Math.round(b + (255 - b) * 0.2))
+  );
+
+  // より暗い色 (20%明度ダウン)
+  const darker = rgbToHex(
+    Math.max(0, Math.round(r * 0.8)),
+    Math.max(0, Math.round(g * 0.8)),
+    Math.max(0, Math.round(b * 0.8))
+  );
+
+  // くすんだ色 (彩度を下げる)
+  const grayValue = Math.round((r + g + b) / 3);
+  const muted = rgbToHex(
+    Math.round((r + grayValue) / 2),
+    Math.round((g + grayValue) / 2),
+    Math.round((b + grayValue) / 2)
+  );
+
+  // 鮮やかな色 (彩度を上げる)
+  const maxComponent = Math.max(r, g, b);
+  const bright = rgbToHex(
+    Math.min(255, Math.round(r * (255 / maxComponent) * 0.9)),
+    Math.min(255, Math.round(g * (255 / maxComponent) * 0.9)),
+    Math.min(255, Math.round(b * (255 / maxComponent) * 0.9))
+  );
+
+  return {
+    lighter,
+    darker,
+    muted,
+    bright
+  };
 };

@@ -1,21 +1,21 @@
-import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ChevronLeft, ChevronRight, FileText, Edit3, Plus, Check } from 'lucide-react';
 import { useNotebookStore } from '../../store/useNotebookStore';
-import LoadingSpinner from '../ui/LoadingSpinner';
+// LoadingSpinner removed as it's no longer needed after removing Suspense
 import { logger } from '../../utils/logger';
 import { validateNoteTitle } from '../../utils/validation';
-import { debounce } from '../../utils/debounce';
+import { debounce, DebouncedFunction } from '../../utils/debounce';
 
-// Lazy load heavy components
-const RichTextEditor = lazy(() => import('./RichTextEditor'));
-const MarkdownEditor = lazy(() => import('./MarkdownEditor'));
-const NoteMetadata = lazy(() => import('./NoteMetadata'));
+// Import components directly to avoid chunk loading conflicts
+import RichTextEditor from './RichTextEditor';
+import MarkdownEditor from './MarkdownEditor';
+import NoteMetadata from './NoteMetadata';
 
 interface RichNoteEditorProps {
   className?: string;
 }
 
-const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = '' }) => {
+const RichNoteEditor: React.FC<RichNoteEditorProps> = ({ className = '' }) => {
   const {
     selectedNote,
     currentPage,
@@ -33,6 +33,67 @@ const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = 
   const [editorType, setEditorType] = useState<'rich' | 'markdown'>('rich');
   const [showSaveNotification, setShowSaveNotification] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  
+  // ✅ SuperClaude修正: UI同期用の実際のページ数トラッキング
+  const [actualPageCount, setActualPageCount] = useState<number>(1);
+
+  // 前回のselectedNoteを追跡するためのref
+  const prevSelectedNoteRef = useRef(selectedNote);
+  const prevCurrentPageRef = useRef(currentPage);
+  const prevTitleRef = useRef(title);
+  const prevContentRef = useRef(content);
+  const prevTagsRef = useRef(tags);
+  const prevEditorTypeRef = useRef(editorType);
+
+  // 🔥 ノート切り替え時の保存処理 - CRITICAL FIX
+  useEffect(() => {
+    const prevNote = prevSelectedNoteRef.current;
+    const prevPage = prevCurrentPageRef.current;
+    
+    // ノートまたはページが変更された場合、前の編集内容を保存
+    if (prevNote && (prevNote.id !== selectedNote?.id || prevPage !== currentPage)) {
+      console.log(`🚨 CRITICAL: ノート/ページ切り替え検出 - 前の編集内容を即座に保存`);
+      console.log(`   前: Note=${prevNote.id}, Page=${prevPage}`);
+      console.log(`   後: Note=${selectedNote?.id || 'null'}, Page=${currentPage}`);
+      
+      // デバウンス中の保存を即座に実行
+      debouncedSave.flush();
+      
+      // さらに、現在のstateで明示的に保存（double safety）
+      if (prevNote.pages && prevNote.pages[prevPage]) {
+        try {
+          console.log(`💾 EMERGENCY SAVE: 明示的保存実行`);
+          // 緊急保存は同期実行（Promiseは待たない）
+          updateNote(prevNote.id, {
+            title: prevTitleRef.current,
+            tags: prevTagsRef.current,
+            editorType: prevEditorTypeRef.current,
+            pages: prevNote.pages.map((page, index) =>
+              index === prevPage ? { ...page, content: prevContentRef.current } : page
+            )
+          }).catch((error) => {
+            console.error(`❌ EMERGENCY SAVE失敗:`, error);
+          });
+          console.log(`✅ EMERGENCY SAVE実行開始`);
+        } catch (error) {
+          console.error(`❌ EMERGENCY SAVE失敗:`, error);
+        }
+      }
+    }
+    
+    // refを更新
+    prevSelectedNoteRef.current = selectedNote;
+    prevCurrentPageRef.current = currentPage;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNote, currentPage, updateNote]); // debouncedSave is intentionally excluded to avoid hoisting issues
+
+  // refの値を更新
+  useEffect(() => {
+    prevTitleRef.current = title;
+    prevContentRef.current = content;
+    prevTagsRef.current = tags;
+    prevEditorTypeRef.current = editorType;
+  }, [title, content, tags, editorType]);
 
   // ノートが選択されたときの初期化
   useEffect(() => {
@@ -45,6 +106,15 @@ const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = 
       setTitle(selectedNote.title);
       setTags(selectedNote.tags || []);
       setEditorType(selectedNote.editorType || 'rich');
+      
+      // ✅ SuperClaude修正: ページ数も即座に更新
+      setActualPageCount(selectedNote.pages.length);
+      
+      // ⭐️ 決定的修正: currentPageを0にリセット＋ページ1のコンテンツ設定
+      if (currentPage !== 0) {
+        console.log(`🎯 currentPageを${currentPage}から0にリセット`);
+        setCurrentPage(0);
+      }
       
       // 常に1ページ目から開始
       const firstPageData = selectedNote.pages[0];
@@ -61,25 +131,72 @@ const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = 
       setTags([]);
       setContent('');
       setEditorType('rich');
+      setActualPageCount(1);
+      setCurrentPage(0);
     }
-  }, [selectedNote]);
+  }, [selectedNote?.id]); // ⭐️ selectedNote.idのみ監視でループ防止
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 
-  // ページが変更されたときのコンテンツ更新
+  // ページが変更されたときのコンテンツ更新（無限ループ防止版）
   useEffect(() => {
-    if (selectedNote && selectedNote.pages[currentPage]) {
-      const currentPageData = selectedNote.pages[currentPage];
-      console.log(`🔄 ページ切り替え: ${currentPage + 1}/${selectedNote.pages.length}`);
-      console.log(`📄 ページ ${currentPage + 1} の内容:`, currentPageData.content?.substring(0, 100) + '...');
-      console.log(`🎯 現在のcontent state:`, content.substring(0, 50) + '...');
-      setContent(currentPageData.content || '');
-      console.log(`✅ content更新完了: ${(currentPageData.content || '').substring(0, 50)}...`);
+    console.log(`🔄 [TRACE] ページ変更useEffect起動: currentPage=${currentPage}, selectedNote.id=${selectedNote?.id}`);
+    console.log(`🔄 [TRACE] useEffect詳細状態:`);
+    console.log(`   - selectedNote: ${!!selectedNote}`);
+    console.log(`   - selectedNote.pages: ${!!selectedNote?.pages}`);
+    console.log(`   - pages.length: ${selectedNote?.pages?.length}`);
+    console.log(`   - currentPage: ${currentPage}`);
+    
+    if (selectedNote && selectedNote.pages && selectedNote.pages.length > 0) {
+      const safeCurrentPage = Math.min(currentPage, selectedNote.pages.length - 1);
+      const currentPageData = selectedNote.pages[safeCurrentPage];
+      
+      console.log(`📄 [TRACE] ページデータロード: page=${safeCurrentPage}, hasData=${!!currentPageData}`);
+      console.log(`📄 [TRACE] safeCurrentPage計算: Math.min(${currentPage}, ${selectedNote.pages.length - 1}) = ${safeCurrentPage}`);
+      
+      if (currentPageData) {
+        const pageContent = currentPageData.content || '';
+        console.log(`📝 [TRACE] コンテンツ設定: "${pageContent.substring(0, 30)}..."`);
+        console.log(`📝 [TRACE] setContent実行前: 新しいコンテンツ長=${pageContent.length}`);
+        setContent(pageContent);
+        console.log(`📝 [TRACE] setContent実行後`);
+      } else {
+        console.log(`❌ [TRACE] ページデータなし、空コンテンツ設定`);
+        setContent('');
+      }
     } else {
-      console.log(`❌ ページデータが見つかりません: currentPage=${currentPage}, selectedNote=${!!selectedNote}, pages=${selectedNote?.pages?.length}`);
+      console.log(`🗑️ [TRACE] selectedNoteまたはpagesなし、空コンテンツ設定`);
+      setContent('');
     }
-  }, [currentPage, selectedNote?.pages]); // selectedNote.pagesを依存配列に追加
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, selectedNote?.id]); // ⭐️ pages.lengthを削除してループを防止
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+  // ✅ SuperClaude修正: actualPageCountとselectedNote.pages.lengthの同期
+  useEffect(() => {
+    if (selectedNote && selectedNote.pages) {
+      const currentStorePageCount = selectedNote.pages.length;
+      if (currentStorePageCount !== actualPageCount) {
+        console.log(`🔄 [SYNC] ページ数同期: ${actualPageCount} → ${currentStorePageCount}`);
+        setActualPageCount(currentStorePageCount);
+      }
+    }
+  }, [selectedNote?.pages?.length, actualPageCount]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+  // ⭐️ SuperClaude修正: ストアとローカルステートの同期
+  useEffect(() => {
+    if (selectedNote && selectedNote.pages) {
+      const currentStorePageCount = selectedNote.pages.length;
+      if (actualPageCount !== currentStorePageCount) {
+        console.log(`🔄 [SYNC] ページ数同期: ${actualPageCount} → ${currentStorePageCount}`);
+        setActualPageCount(currentStorePageCount);
+      }
+    }
+  }, [selectedNote?.pages?.length, actualPageCount]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // リアルタイム自動保存（デバウンス）- 1.5秒で素早く保存
-  const debouncedSave = useMemo(() => {
+  const debouncedSave: DebouncedFunction<() => void> = useMemo(() => {
     return debounce(() => {
       if (selectedNote && selectedNote.pages[currentPage]) {
         try {
@@ -92,11 +209,15 @@ const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = 
             pages: selectedNote.pages.map((page, index) =>
               index === currentPage ? { ...page, content } : page
             )
+          }).then(() => {
+            setSaveStatus('saved');
+            setShowSaveNotification(true);
+            setTimeout(() => setShowSaveNotification(false), 1000);
+            logger.info('Note auto-saved');
+          }).catch((error) => {
+            setSaveStatus('unsaved');
+            logger.error('Auto-save failed:', error);
           });
-          setSaveStatus('saved');
-          setShowSaveNotification(true);
-          setTimeout(() => setShowSaveNotification(false), 1000);
-          logger.info('Note auto-saved');
         } catch (error) {
           setSaveStatus('unsaved');
           logger.error('Auto-save failed:', error);
@@ -136,17 +257,17 @@ const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = 
   }, [debouncedSave]);
 
   // メタデータハンドラー
-  const handleToggleFavorite = useCallback(() => {
+  const handleToggleFavorite = useCallback(async () => {
     if (selectedNote) {
-      updateNote(selectedNote.id, {
+      await updateNote(selectedNote.id, {
         isFavorite: !selectedNote.isFavorite
       });
     }
   }, [selectedNote, updateNote]);
 
-  const handleTogglePin = useCallback(() => {
+  const handleTogglePin = useCallback(async () => {
     if (selectedNote) {
-      updateNote(selectedNote.id, {
+      await updateNote(selectedNote.id, {
         isPinned: !selectedNote.isPinned
       });
     }
@@ -163,26 +284,8 @@ const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = 
     setShowMindMap(true);
   }, [setShowMindMap]);
 
-  // 手動保存関数
-  const saveCurrentPage = useCallback(() => {
-    if (selectedNote) {
-      updateNote(selectedNote.id, {
-        title,
-        tags,
-        editorType,
-        pages: selectedNote.pages.map((page, index) =>
-          index === currentPage ? { ...page, content } : page
-        )
-      });
-      logger.info('Page manually saved');
-      
-      // 保存通知を表示
-      setShowSaveNotification(true);
-      setTimeout(() => {
-        setShowSaveNotification(false);
-      }, 2000);
-    }
-  }, [selectedNote, title, tags, editorType, content, currentPage, updateNote]);
+  // 手動保存関数 - 現在は使用しないがCtrl+S保存で利用
+  // const saveCurrentPage = useCallback(() => { ... }, [...]);
 
   // Ctrl+Sのキーボードショートカット（即座に保存）
   useEffect(() => {
@@ -199,10 +302,14 @@ const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = 
             pages: selectedNote.pages.map((page, index) =>
               index === currentPage ? { ...page, content } : page
             )
+          }).then(() => {
+            setSaveStatus('saved');
+            setShowSaveNotification(true);
+            setTimeout(() => setShowSaveNotification(false), 1000);
+          }).catch((error) => {
+            console.error('❌ Ctrl+S保存失敗:', error);
+            setSaveStatus('unsaved');
           });
-          setSaveStatus('saved');
-          setShowSaveNotification(true);
-          setTimeout(() => setShowSaveNotification(false), 1000);
         }
         console.log('📝 Ctrl+Sで即座に保存しました');
       }
@@ -214,70 +321,178 @@ const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = 
     };
   }, [selectedNote, title, tags, editorType, content, currentPage, updateNote]);
 
-  // ページナビゲーション - 切り替え前に保存
-  const handlePrevPage = useCallback(() => {
-    if (currentPage > 0) {
-      console.log(`⬅️ 前のページに移動: ${currentPage + 1} → ${currentPage}`);
-      saveCurrentPage(); // 現在のページを保存してから移動
-      setTimeout(() => {
-        setCurrentPage(currentPage - 1);
-        console.log(`✅ ページ移動完了: ${currentPage}`);
-      }, 50);
-    }
-  }, [currentPage, setCurrentPage, saveCurrentPage]);
-
-  const handleNextPage = useCallback(() => {
-    if (selectedNote && currentPage < selectedNote.pages.length - 1) {
-      console.log(`➡️ 次のページに移動: ${currentPage + 1} → ${currentPage + 2}`);
-      saveCurrentPage(); // 現在のページを保存してから移動
-      setTimeout(() => {
-        setCurrentPage(currentPage + 1);
-        console.log(`✅ ページ移動完了: ${currentPage + 1}`);
-      }, 50);
-    }
-  }, [selectedNote, currentPage, setCurrentPage, saveCurrentPage]);
-
-  const handleAddPage = useCallback(() => {
-    if (selectedNote) {
-      console.log(`🆕 新しいページを追加開始`);
-      console.log(`📊 現在の状態: currentPage=${currentPage}, pages.length=${selectedNote.pages.length}`);
+  // ページ離脱時・アンマウント時の保存 - CRITICAL SAFETY
+  useEffect(() => {
+    const handleBeforeUnload = (_e: BeforeUnloadEvent) => {
+      // デバウンス中の保存を即座に実行
+      debouncedSave.flush();
       
-      // 現在のページを明示的に保存
-      const currentPageData = selectedNote.pages[currentPage];
-      if (currentPageData) {
-        console.log(`💾 現在のページを保存: content="${content.substring(0, 50)}..."`);
-        const updatedCurrentPages = selectedNote.pages.map((page, index) =>
+      // 現在編集中の内容を保存
+      if (selectedNote && selectedNote.pages[currentPage]) {
+        // beforeunloadでは同期実行（Promiseは待たない）
+        updateNote(selectedNote.id, {
+          title,
+          tags,
+          editorType,
+          pages: selectedNote.pages.map((page, index) =>
+            index === currentPage ? { ...page, content } : page
+          )
+        }).catch((error) => {
+          console.error('❌ BEFOREUNLOAD保存失敗:', error);
+        });
+        console.log('🚨 BEFOREUNLOAD: 緊急保存実行');
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    // コンポーネントアンマウント時の保存
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      
+      // アンマウント時も保存
+      debouncedSave.flush();
+      if (selectedNote && selectedNote.pages && selectedNote.pages[currentPage]) {
+        // unmountでは同期実行（Promiseは待たない）
+        updateNote(selectedNote.id, {
+          title,
+          tags,
+          editorType,
+          pages: selectedNote.pages.map((page, index) =>
+            index === currentPage ? { ...page, content } : page
+          )
+        }).catch((error) => {
+          console.error('❌ UNMOUNT保存失敗:', error);
+        });
+        console.log('🚨 UNMOUNT: 緊急保存実行');
+      }
+    };
+  }, [selectedNote, title, tags, editorType, content, currentPage, updateNote, debouncedSave]);
+
+  // ページナビゲーション - 切り替え前に保存
+  const handlePrevPage = useCallback(async () => {
+    console.log(`🔍 [TRACE] handlePrevPage開始: currentPage=${currentPage}, pages.length=${selectedNote?.pages.length}`);
+    
+    if (currentPage > 0 && selectedNote && selectedNote.pages.length > 0) {
+      const targetPage = currentPage - 1;
+      console.log(`📍 [TRACE] 前のページに移動: ${currentPage} → ${targetPage}`);
+      
+      // 現在のページ内容を保存
+      if (selectedNote.pages[currentPage] && content) {
+        console.log(`💾 [TRACE] ページ移動前保存: currentPage=${currentPage}, content.length=${content.length}`);
+        const updatedPages = selectedNote.pages.map((page, index) =>
           index === currentPage ? { ...page, content } : page
         );
-        
-        // まず現在のページ内容を保存
-        updateNote(selectedNote.id, { pages: updatedCurrentPages });
+        await updateNote(selectedNote.id, { pages: updatedPages });
+        console.log(`✅ [TRACE] 保存完了: pages.length=${updatedPages.length}`);
       }
       
-      // 新しいページを追加
-      const newPageId = Math.max(...selectedNote.pages.map(p => p.id)) + 1;
+      // ページ切り替えを実行（コンテンツはuseEffectに任せる）
+      setCurrentPage(targetPage);
+      console.log(`🎯 [TRACE] handlePrevPage完了: ページ${targetPage + 1}に移動`);
+    } else {
+      console.log(`❌ [TRACE] handlePrevPage条件不一致: currentPage=${currentPage}, hasNote=${!!selectedNote}, pages.length=${selectedNote?.pages.length}`);
+    }
+  }, [currentPage, selectedNote, content, updateNote, setCurrentPage]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+  const handleNextPage = useCallback(async () => {
+    console.log(`🔍 [TRACE] handleNextPage開始: currentPage=${currentPage}, pages.length=${selectedNote?.pages.length}`);
+    console.log(`🔍 [TRACE] 条件チェック詳細:`);
+    console.log(`   - selectedNote: ${!!selectedNote}`);
+    console.log(`   - currentPage: ${currentPage}`);
+    console.log(`   - actualPageCount: ${actualPageCount}`);
+    console.log(`   - pages.length: ${selectedNote?.pages.length}`);
+    console.log(`   - currentPage < actualPageCount - 1: ${currentPage} < ${actualPageCount - 1} = ${currentPage < actualPageCount - 1}`);
+    console.log(`   - 計算: ${currentPage} < ${actualPageCount - 1} = ${currentPage < actualPageCount - 1}`);
+    
+    if (selectedNote && currentPage < actualPageCount - 1) {
+      const targetPage = currentPage + 1;
+      console.log(`📍 [TRACE] 次のページに移動: ${currentPage} → ${targetPage}`);
+      
+      // 現在のページ内容を保存
+      if (selectedNote.pages[currentPage] && content) {
+        console.log(`💾 [TRACE] ページ移動前保存: currentPage=${currentPage}, content.length=${content.length}`);
+        const updatedPages = selectedNote.pages.map((page, index) =>
+          index === currentPage ? { ...page, content } : page
+        );
+        await updateNote(selectedNote.id, { pages: updatedPages });
+        console.log(`✅ [TRACE] 保存完了: pages.length=${updatedPages.length}`);
+      }
+      
+      // ページ切り替えを実行（コンテンツはuseEffectに任せる）
+      console.log(`🎯 [TRACE] setCurrentPage(${targetPage})実行前`);
+      setCurrentPage(targetPage);
+      console.log(`🎯 [TRACE] setCurrentPage(${targetPage})実行後`);
+      console.log(`🎯 [TRACE] handleNextPage完了: ページ${targetPage + 1}に移動`);
+    } else {
+      console.log(`❌ [TRACE] handleNextPage条件不一致: currentPage=${currentPage}, hasNote=${!!selectedNote}, pages.length=${selectedNote?.pages.length}`);
+      if (selectedNote) {
+        console.log(`❌ [TRACE] 条件詳細分析:`);
+        console.log(`   - 条件1 selectedNote: ${!!selectedNote} ✅`);
+        console.log(`   - 条件2 currentPage < actualPageCount - 1: ${currentPage} < ${actualPageCount - 1} = ${currentPage < actualPageCount - 1} ${currentPage < actualPageCount - 1 ? '✅' : '❌'}`);
+        if (currentPage >= actualPageCount - 1) {
+          console.log(`❌ [TRACE] 最後のページに到達: ${currentPage + 1}/${actualPageCount}`);
+        }
+      }
+    }
+  }, [currentPage, actualPageCount, selectedNote, content, updateNote, setCurrentPage]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+  const handleAddPage = useCallback(async () => {
+    console.log(`🔍 [TRACE] handleAddPage開始`);
+    
+    if (!selectedNote) {
+      console.log(`❌ [TRACE] selectedNoteが存在しません`);
+      return;
+    }
+    
+    try {
+      console.log(`🆕 [TRACE] 新しいページを追加開始`);
+      console.log(`📊 [TRACE] 現在の状態: currentPage=${currentPage}, pages.length=${selectedNote.pages.length}`);
+      
+      // ✅ ID統一修正: string ID生成（空配列対応）
+      const maxId = selectedNote.pages.length > 0 
+        ? Math.max(...selectedNote.pages.map(p => parseInt(p.id) || 0))
+        : 0;
+      const newPageId = (maxId + 1).toString();
+      console.log(`🆔 [TRACE] 新しいページID生成: ${newPageId}`);
+      
+      // 現在のページ内容を保存した状態で新しいページを追加
+      const updatedPages = selectedNote.pages.map((page, index) =>
+        index === currentPage ? { ...page, content } : page
+      );
+      console.log(`📝 [TRACE] 現在のページ内容保存: currentPage=${currentPage}, content.length=${content.length}`);
+      
       const newPage = {
         id: newPageId,
         title: `ページ ${newPageId}`,
         content: ''
       };
       
-      const finalPages = [...selectedNote.pages.map((page, index) =>
-        index === currentPage ? { ...page, content } : page
-      ), newPage];
+      const finalPages = [...updatedPages, newPage];
       const newPageIndex = finalPages.length - 1;
       
-      console.log(`📄 新しいページ追加: ID=${newPageId}, 総ページ数=${finalPages.length}`);
-      console.log(`🎯 新しいページインデックス: ${newPageIndex}`);
+      console.log(`📄 [TRACE] 新しいページ追加: ID=${newPageId}, 総ページ数=${finalPages.length}, newPageIndex=${newPageIndex}`);
       
-      // 全ページを一度に更新
-      updateNote(selectedNote.id, { pages: finalPages });
+      // ✅ SuperClaude修正: UI即座更新 + Promise-based updateNoteで確実に状態更新を待つ
+      setActualPageCount(finalPages.length); // UI即座更新
       
-      // ページインデックスを更新
+      console.log(`💾 [TRACE] updateNote実行開始: noteId=${selectedNote.id}`);
+      await updateNote(selectedNote.id, { pages: finalPages });
+      console.log(`✅ [TRACE] updateNote実行完了 - Promiseで同期保証`);
+      
+      // ✅ 修正: updateNoteのPromise完了後に確実にページ移動
+      console.log(`🎯 [TRACE] setCurrentPage(${newPageIndex})実行`);
       setCurrentPage(newPageIndex);
-      setContent(''); // 新しいページは空のコンテンツ
       
-      console.log(`✅ ページ追加完了: 現在のページは ${newPageIndex + 1}/${finalPages.length}`);
+      console.log(`📝 [TRACE] setContent('')実行`);
+      setContent('');
+      
+      console.log(`✅ [TRACE] ページ追加完了: 現在のページは ${newPageIndex + 1}/${finalPages.length}`);
+      
+    } catch (error) {
+      console.error('❌ [TRACE] ページ追加エラー:', error);
     }
   }, [selectedNote, updateNote, setCurrentPage, currentPage, content]);
 
@@ -304,21 +519,19 @@ const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = 
 
       <div className="flex-1 flex flex-col p-6">
         {/* メタデータセクション */}
-        <Suspense fallback={<LoadingSpinner size="sm" text="メタデータを読み込み中..." />}>
-          <NoteMetadata
-            title={title}
-            tags={tags}
-            isFavorite={selectedNote.isFavorite}
-            isPinned={selectedNote.isPinned}
-            onTitleChange={handleTitleChange}
-            onTagsChange={handleTagsChange}
-            onToggleFavorite={handleToggleFavorite}
-            onTogglePin={handleTogglePin}
-            onDelete={handleDelete}
-            onShowMindMap={handleShowMindMap}
-            isEditing={isEditing}
-          />
-        </Suspense>
+        <NoteMetadata
+          title={title}
+          tags={tags}
+          isFavorite={selectedNote.isFavorite}
+          isPinned={selectedNote.isPinned}
+          onTitleChange={handleTitleChange}
+          onTagsChange={handleTagsChange}
+          onToggleFavorite={handleToggleFavorite}
+          onTogglePin={handleTogglePin}
+          onDelete={handleDelete}
+          onShowMindMap={handleShowMindMap}
+          isEditing={isEditing}
+        />
 
         {/* エディタセクション */}
         <div className="flex-1 flex flex-col">
@@ -353,13 +566,18 @@ const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = 
               {/* ページ情報とナビゲーション */}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-500">
-                  ページ {currentPage + 1} / {selectedNote.pages.length}
+                  ページ {currentPage + 1} / {actualPageCount}
                 </span>
                 
                 {/* ページ移動ボタン */}
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={handlePrevPage}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log(`🔍 [TRACE] 前のページボタンクリック`);
+                      handlePrevPage();
+                    }}
                     disabled={currentPage === 0}
                     className="flex items-center justify-center w-5 h-5 text-gray-600 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     title="前のページ"
@@ -368,8 +586,15 @@ const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = 
                   </button>
                   
                   <button
-                    onClick={handleNextPage}
-                    disabled={currentPage >= selectedNote.pages.length - 1}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log(`🔍 [TRACE] 次のページボタンクリック`);
+                      console.log(`🔍 [TRACE] ボタン状態チェック: currentPage=${currentPage}, actualPageCount=${actualPageCount}, pages.length=${selectedNote.pages.length}`);
+                      console.log(`🔍 [TRACE] disabled計算: ${currentPage} >= ${actualPageCount - 1} = ${currentPage >= actualPageCount - 1}`);
+                      handleNextPage();
+                    }}
+                    disabled={currentPage >= actualPageCount - 1}
                     className="flex items-center justify-center w-5 h-5 text-gray-600 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     title="次のページ"
                   >
@@ -378,7 +603,12 @@ const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = 
                 </div>
                 
                 <button
-                  onClick={handleAddPage}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log(`🔍 [TRACE] ページ追加ボタンクリック`);
+                    handleAddPage();
+                  }}
                   className="flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
                   title="新しいページを追加"
                 >
@@ -417,27 +647,26 @@ const RichNoteEditor: React.FC<RichNoteEditorProps> = React.memo(({ className = 
             </div>
           </div>
 
-          <Suspense fallback={<LoadingSpinner text="エディタを読み込み中..." />}>
-            {editorType === 'markdown' ? (
-              <MarkdownEditor
-                content={content}
-                onContentChange={handleContentChange}
-                isEditing={isEditing}
-              />
-            ) : (
-              <RichTextEditor
-                content={content}
-                onContentChange={handleContentChange}
-                isEditing={isEditing}
-              />
-            )}
-          </Suspense>
+          {editorType === 'markdown' ? (
+            <MarkdownEditor
+              content={content}
+              onContentChange={handleContentChange}
+              isEditing={isEditing}
+            />
+          ) : (
+            <RichTextEditor
+              content={content}
+              onContentChange={handleContentChange}
+              isEditing={isEditing}
+            />
+          )}
         </div>
       </div>
     </div>
   );
-});
+};
 
 RichNoteEditor.displayName = 'RichNoteEditor';
 
-export default RichNoteEditor;
+// ⭐️ 決定的修正: React.memoで不必要な再マウントを完全防止
+export default React.memo(RichNoteEditor);

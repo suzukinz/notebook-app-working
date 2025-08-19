@@ -216,15 +216,17 @@ const EnhancedVoiceInput: React.FC<EnhancedVoiceInputProps> = ({
       <div className="p-6 space-y-6">
         {/* 波形表示 */}
         <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
-          <VoiceInputWaveform
-            isRecording={isListening}
-            audioStream={audioStream}
-            width={280}
+          {audioStream && (
+            <VoiceInputWaveform
+              isRecording={isListening}
+              audioStream={audioStream}
+              width={280}
             height={80}
             color="#3b82f6"
             sensitivity={1.2}
             smoothing={0.7}
-          />
+            />
+          )}
           
           {/* 録音時間と信頼度 */}
           <div className="flex items-center justify-between mt-3 text-sm text-gray-600 dark:text-gray-400">

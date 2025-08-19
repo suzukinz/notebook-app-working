@@ -2,27 +2,45 @@ import React, { useState, useRef } from 'react';
 import Modal from '../ui/Modal';
 import { COLORS } from '../../types';
 import { useNotebookStore } from '../../store/useNotebookStore';
+import { useIndexedDBStore } from '../../store/useIndexedDBStore';
 import { Folder, Upload, X } from 'lucide-react';
 import { validateFolderName, validateImageFile } from '../../utils/validation';
 import { resizeImage } from '../../utils/imageUtils';
 
 const AddFolderDialog: React.FC = () => {
+  // IndexedDBストアから現在の選択状態を取得
+  const indexedDBStore = useIndexedDBStore();
+  const legacyStore = useNotebookStore();
+  
+  // データ取得用ストア選択
+  const dataStore = indexedDBStore.isInitialized ? indexedDBStore : legacyStore;
+  
   const {
     showAddFolderDialog,
     newFolderName,
     newFolderColor,
-    selectedNotebook,
     setShowAddFolderDialog,
     setNewFolderName,
     setNewFolderColor,
     addSubFolder
-  } = useNotebookStore();
+  } = legacyStore; // UI機能はレガシーストアから
+  
+  // 選択状態は適切なストアから取得
+  const selectedNotebook = dataStore.selectedNotebook;
+  
+  // ⭐️ デバッグログを無効化してパフォーマンス向上
+  // console.log('🗂️ AddFolderDialog:', {
+  //   selectedNotebook,
+  //   storeUsed: indexedDBStore.isInitialized ? 'IndexedDB' : 'Legacy',
+  //   showDialog: showAddFolderDialog,
+  //   stackTrace: new Error().stack?.split('\n').slice(1, 5)
+  // });
   
   const [validationError, setValidationError] = useState<string>('');
   const [folderImage, setFolderImage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // フォルダ名を検証
@@ -42,12 +60,23 @@ const AddFolderDialog: React.FC = () => {
         ...(folderImage && { image: folderImage })
       };
       
-      addSubFolder(selectedNotebook, folderData);
-      setNewFolderName('');
-      setNewFolderColor('gray');
-      setFolderImage('');
-      setValidationError('');
-      setShowAddFolderDialog(false);
+      try {
+        console.log('📁 フォルダ作成開始:', { selectedNotebook, folderData });
+        
+        // レガシーストアでフォルダを作成（UIの更新のため）
+        addSubFolder(selectedNotebook, folderData);
+        
+        console.log('✅ フォルダ作成完了');
+        
+        setNewFolderName('');
+        setNewFolderColor('gray');
+        setFolderImage('');
+        setValidationError('');
+        setShowAddFolderDialog(false);
+      } catch (error) {
+        console.error('❌ フォルダ作成エラー:', error);
+        setValidationError('フォルダの作成に失敗しました。');
+      }
     }
   };
 

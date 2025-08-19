@@ -26,13 +26,13 @@ export class MarkdownTableEditor {
 
     // ヘッダー行を解析
     const headerLine = lines[0];
-    if (!headerLine.startsWith('|') || !headerLine.endsWith('|')) return null;
+    if (!headerLine || !headerLine.startsWith('|') || !headerLine.endsWith('|')) return null;
     
     const headerCells = this.parseTableRow(headerLine);
     
     // セパレーター行を解析してアライメントを取得
     const separatorLine = lines[1];
-    if (!separatorLine.startsWith('|') || !separatorLine.endsWith('|')) return null;
+    if (!separatorLine || !separatorLine.startsWith('|') || !separatorLine.endsWith('|')) return null;
     
     const alignments = this.parseAlignments(separatorLine);
     if (alignments.length !== headerCells.length) return null;
@@ -40,21 +40,21 @@ export class MarkdownTableEditor {
     // ヘッダーにアライメント情報を追加
     const headers: TableCell[] = headerCells.map((content, index) => ({
       content,
-      alignment: alignments[index]
+      alignment: alignments[index] || 'left'
     }));
 
     // データ行を解析
     const rows: TableRow[] = [];
     for (let i = 2; i < lines.length; i++) {
       const line = lines[i];
-      if (!line.startsWith('|') || !line.endsWith('|')) continue;
+      if (!line || !line.startsWith('|') || !line.endsWith('|')) continue;
       
       const cellContents = this.parseTableRow(line);
       if (cellContents.length !== headerCells.length) continue;
       
       const cells: TableCell[] = cellContents.map((content, index) => ({
         content,
-        alignment: alignments[index]
+        alignment: alignments[index] || 'left'
       }));
       
       rows.push({ cells });
@@ -188,22 +188,32 @@ export class MarkdownTableEditor {
       // ヘッダーの更新
       if (colIndex < 0 || colIndex >= table.headers.length) return table;
       const newHeaders = [...table.headers];
-      newHeaders[colIndex] = { ...newHeaders[colIndex], content };
+      const currentHeader = newHeaders[colIndex];
+      if (currentHeader) {
+        newHeaders[colIndex] = { ...currentHeader, content };
+      }
       return { ...table, headers: newHeaders };
     } else {
       // データ行の更新
-      if (rowIndex < 0 || rowIndex >= table.rows.length || colIndex < 0 || colIndex >= table.rows[rowIndex].cells.length) {
+      const currentRow = table.rows[rowIndex];
+      if (!currentRow || rowIndex < 0 || rowIndex >= table.rows.length || colIndex < 0 || colIndex >= currentRow.cells.length) {
         return table;
       }
       const newRows = [...table.rows];
-      newRows[rowIndex] = {
-        ...newRows[rowIndex],
-        cells: [...newRows[rowIndex].cells]
-      };
-      newRows[rowIndex].cells[colIndex] = {
-        ...newRows[rowIndex].cells[colIndex],
-        content
-      };
+      const targetRow = newRows[rowIndex];
+      if (targetRow) {
+        newRows[rowIndex] = {
+          ...targetRow,
+          cells: [...targetRow.cells]
+        };
+        const targetCell = newRows[rowIndex]!.cells[colIndex];
+        if (targetCell) {
+          newRows[rowIndex]!.cells[colIndex] = {
+            ...targetCell,
+            content
+          };
+        }
+      }
       return { ...table, rows: newRows };
     }
   }
@@ -214,7 +224,10 @@ export class MarkdownTableEditor {
 
     // ヘッダーのアライメントを更新
     const newHeaders = [...table.headers];
-    newHeaders[colIndex] = { ...newHeaders[colIndex], alignment };
+    const currentHeader = newHeaders[colIndex];
+    if (currentHeader) {
+      newHeaders[colIndex] = { ...currentHeader, alignment };
+    }
 
     // 全ての行の該当列のアライメントを更新
     const newRows = table.rows.map(row => ({
@@ -269,23 +282,34 @@ export class MarkdownTableEditor {
     // カーソル位置がある行を見つける
     for (let i = 0; i < lines.length; i++) {
       const lineStart = currentPos;
-      const lineEnd = currentPos + lines[i].length;
+      const lineEnd = currentPos + (lines[i]?.length || 0);
       
       if (cursorPosition >= lineStart && cursorPosition <= lineEnd + 1) { // +1 for newline
         // この行がテーブルの一部かチェック
-        if (this.isTableLine(lines[i])) {
+        const currentLine = lines[i];
+        if (currentLine && this.isTableLine(currentLine)) {
           // 前後の行も含めてテーブル全体を取得
           tableStart = i;
           tableEnd = i;
           
           // 前の行を遡ってテーブルの開始を見つける
-          while (tableStart > 0 && this.isTableLine(lines[tableStart - 1])) {
-            tableStart--;
+          while (tableStart > 0) {
+            const prevLine = lines[tableStart - 1];
+            if (prevLine && this.isTableLine(prevLine)) {
+              tableStart--;
+            } else {
+              break;
+            }
           }
           
           // 後の行を進んでテーブルの終了を見つける
-          while (tableEnd < lines.length - 1 && this.isTableLine(lines[tableEnd + 1])) {
-            tableEnd++;
+          while (tableEnd < lines.length - 1) {
+            const nextLine = lines[tableEnd + 1];
+            if (nextLine && this.isTableLine(nextLine)) {
+              tableEnd++;
+            } else {
+              break;
+            }
           }
           
           tableLines = lines.slice(tableStart, tableEnd + 1);
@@ -304,12 +328,12 @@ export class MarkdownTableEditor {
     // テーブルの開始・終了位置を計算
     let start = 0;
     for (let i = 0; i < tableStart; i++) {
-      start += lines[i].length + 1; // +1 for newline
+      start += (lines[i]?.length || 0) + 1; // +1 for newline
     }
 
     let end = start;
     for (let i = tableStart; i <= tableEnd; i++) {
-      end += lines[i].length + 1; // +1 for newline
+      end += (lines[i]?.length || 0) + 1; // +1 for newline
     }
     end--; // 最後の改行は含めない
 

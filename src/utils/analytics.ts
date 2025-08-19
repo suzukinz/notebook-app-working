@@ -121,7 +121,7 @@ export const calculateDashboardStats = (state: NotebookState): DashboardStats =>
     ).length;
     
     weekActivity.push({
-      date: date.toISOString().split('T')[0],
+      date: date.toISOString().split('T')[0]!,
       activity: dayActivity
     });
   }

@@ -21,6 +21,10 @@ const ImageUpload: React.FC<ImageUploadProps> = memo(({ onImageInsert, className
 
     try {
       const file = files[0];
+      if (!file) {
+        setError('ファイルが選択されていません');
+        return;
+      }
       
       // 画像ファイルかチェック
       if (!isImageFile(file)) {

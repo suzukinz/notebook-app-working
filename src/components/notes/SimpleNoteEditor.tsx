@@ -49,6 +49,7 @@ const SimpleNoteEditor: React.FC<SimpleNoteEditorProps> = ({ className = '' }) =
     const updatedPages = [...selectedNote.pages];
     updatedPages[currentPage] = {
       ...updatedPages[currentPage],
+      id: updatedPages[currentPage]?.id || Date.now().toString(), // ✅ ID統一修正: string ID生成
       title: `ページ${currentPage + 1}`,
       content: content
     };
@@ -57,7 +58,7 @@ const SimpleNoteEditor: React.FC<SimpleNoteEditorProps> = ({ className = '' }) =
       title: title,
       pages: updatedPages,
       tags: tags,
-      updatedAt: new Date().toISOString().split('T')[0]
+      updatedAt: new Date().toISOString().split('T')[0] || ''
     });
 
     setIsEditing(false);
@@ -163,10 +164,11 @@ const SimpleNoteEditor: React.FC<SimpleNoteEditorProps> = ({ className = '' }) =
     if (files.length > 0) {
       const file = files[0];
       
-      if (isImageFile(file)) {
+      if (file && isImageFile(file)) {
         try {
           const base64 = await resizeImage(file, 800, 600, 0.8);
-          const markdown = generateImageMarkdown(base64, file.name.replace(/\.[^/.]+$/, ""), file.name);
+          const fileName = file?.name.replace(/\.[^/.]+$/, "") || 'unnamed';
+          const markdown = generateImageMarkdown(base64, fileName, file?.name || 'unnamed');
           
           // カーソル位置に挿入
           if (textareaRef.current) {

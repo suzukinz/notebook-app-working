@@ -5,6 +5,16 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || '';
 const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY || '';
 
+// デバッグ情報を出力（本番環境では削除すること）
+if (!supabaseUrl || !supabaseKey) {
+  console.warn('⚠️ Supabase環境変数が設定されていません');
+  console.log('REACT_APP_SUPABASE_URL:', supabaseUrl ? '設定済み' : '未設定');
+  console.log('REACT_APP_SUPABASE_ANON_KEY:', supabaseKey ? '設定済み' : '未設定');
+} else {
+  console.log('✅ Supabase設定完了');
+  console.log('Project URL:', supabaseUrl);
+}
+
 export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 // オフラインファースト同期マネージャー

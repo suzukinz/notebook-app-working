@@ -68,21 +68,21 @@ export const handleError = (error: unknown, context?: string): AppError => {
     if (error.message.includes('quota') || error.message.includes('storage')) {
       appError = {
         code: ERROR_CODES.STORAGE_FULL,
-        message: ERROR_MESSAGES[ERROR_CODES.STORAGE_FULL],
+        message: ERROR_MESSAGES[ERROR_CODES.STORAGE_FULL]!,
         details: error.message,
         severity: 'high'
       };
     } else if (error.message.includes('network') || error.message.includes('fetch')) {
       appError = {
         code: ERROR_CODES.NETWORK_ERROR,
-        message: ERROR_MESSAGES[ERROR_CODES.NETWORK_ERROR],
+        message: ERROR_MESSAGES[ERROR_CODES.NETWORK_ERROR]!,
         details: error.message,
         severity: 'medium'
       };
     } else {
       appError = {
         code: ERROR_CODES.UNKNOWN_ERROR,
-        message: ERROR_MESSAGES[ERROR_CODES.UNKNOWN_ERROR],
+        message: ERROR_MESSAGES[ERROR_CODES.UNKNOWN_ERROR]!,
         details: error.message,
         severity: 'medium'
       };
@@ -90,7 +90,7 @@ export const handleError = (error: unknown, context?: string): AppError => {
   } else {
     appError = {
       code: ERROR_CODES.UNKNOWN_ERROR,
-      message: ERROR_MESSAGES[ERROR_CODES.UNKNOWN_ERROR],
+      message: ERROR_MESSAGES[ERROR_CODES.UNKNOWN_ERROR]!,
       details: String(error),
       severity: 'low'
     };
@@ -133,7 +133,7 @@ export const validateImageFile = (file: File): void => {
   if (file.size > maxSize) {
     throw new NotebookError(
       ERROR_CODES.FILE_TOO_LARGE,
-      ERROR_MESSAGES[ERROR_CODES.FILE_TOO_LARGE],
+      ERROR_MESSAGES[ERROR_CODES.FILE_TOO_LARGE]!,
       'medium',
       `File size: ${file.size} bytes`
     );

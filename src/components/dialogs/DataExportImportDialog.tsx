@@ -13,6 +13,7 @@ import {
 import { useNotebookStore } from '../../store/useNotebookStore';
 import { exportData, downloadData, uploadFile, importData, ExportOptions, ImportOptions, ImportResult } from '../../utils/dataManager';
 import { logger } from '../../utils/logger';
+import { safeReload } from '../../utils/safeReload';
 
 interface DataExportImportDialogProps {
   isOpen: boolean;
@@ -116,7 +117,7 @@ const DataExportImportDialog: React.FC<DataExportImportDialogProps> = ({
             if (result.stats?.settingsImported && result.stats.settingsImported.length > 0) {
               setTimeout(() => {
                 if (window.confirm('設定の変更を反映するためにページをリロードします。')) {
-                  window.location.reload();
+                  safeReload();
                 }
               }, 1000);
             }

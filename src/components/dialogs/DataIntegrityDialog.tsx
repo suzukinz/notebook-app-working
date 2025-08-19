@@ -255,7 +255,7 @@ const DataIntegrityDialog: React.FC<DataIntegrityDialogProps> = ({
               </span>
             </div>
             <div className="text-xs text-gray-500">
-              最新: {new Date(backups[0]).toLocaleString('ja-JP')}
+              最新: {backups[0] ? new Date(backups[0]).toLocaleString('ja-JP') : '不明'}
             </div>
           </div>
         )}

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { MessageSquare, Plus, Heart, MessageCircle, Repeat2, Share, Trash2, Image, Send } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { MessageSquare, Plus, Heart, MessageCircle, Repeat2, Share, Trash2, Image, Send, Calendar } from 'lucide-react';
 
 interface Comment {
   id: string;
@@ -21,16 +21,35 @@ interface TimelineEntry {
 
 interface TimelineProps {
   selectedDate?: Date | null;
+  onTimelineEntriesChange?: (dates: Date[]) => void;
 }
 
-const Timeline: React.FC<TimelineProps> = ({ selectedDate }) => {
+const Timeline: React.FC<TimelineProps> = ({ selectedDate, onTimelineEntriesChange }) => {
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
   const [newEntry, setNewEntry] = useState('');
   const [showComposer, setShowComposer] = useState(false);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [showCommentsFor, setShowCommentsFor] = useState<string | null>(null);
   const [newComment, setNewComment] = useState<{[key: string]: string}>({});
+  const [viewingDate, setViewingDate] = useState<Date>(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
+  // タイムラインに投稿がある日付を取得する関数
+  const getEntriesDateList = useCallback((): Date[] => {
+    const dates = new Set<string>();
+    entries.forEach(entry => {
+      const entryDate = new Date(entry.timestamp);
+      const dateString = `${entryDate.getFullYear()}-${entryDate.getMonth()}-${entryDate.getDate()}`;
+      dates.add(dateString);
+    });
+    
+    return Array.from(dates).map(dateString => {
+      const [year, month, day] = dateString.split('-').map(Number);
+      return new Date(year!, month!, day!);
+    });
+  }, [entries]);
 
   // ローカルストレージからエントリを読み込む
   useEffect(() => {
@@ -43,20 +62,72 @@ const Timeline: React.FC<TimelineProps> = ({ selectedDate }) => {
   // エントリが変更されたらローカルストレージに保存
   useEffect(() => {
     localStorage.setItem('dashboard-timeline', JSON.stringify(entries));
-  }, [entries]);
+    
+    // 親コンポーネントにタイムライン投稿がある日付を通知
+    if (onTimelineEntriesChange) {
+      onTimelineEntriesChange(getEntriesDateList());
+    }
+  }, [entries, onTimelineEntriesChange, getEntriesDateList]);
+
+  // 外部からの日付選択を反映
+  useEffect(() => {
+    if (selectedDate) {
+      setViewingDate(selectedDate);
+    }
+  }, [selectedDate]);
+
+  // 外側をクリックしたときに日付選択を閉じる
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (showDatePicker && !target.closest('.date-picker-container')) {
+        setShowDatePicker(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showDatePicker]);
+
+  // 選択された日付のエントリのみをフィルタリング
+  const filteredEntries = entries.filter(entry => {
+    const entryDate = new Date(entry.timestamp);
+    const compareDate = viewingDate;
+    
+    // 日付フィルター
+    const dateMatches = (
+      entryDate.getFullYear() === compareDate.getFullYear() &&
+      entryDate.getMonth() === compareDate.getMonth() &&
+      entryDate.getDate() === compareDate.getDate()
+    );
+    
+    // 検索フィルター
+    const searchMatches = !searchTerm || 
+      entry.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      entry.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    // タグフィルター
+    const tagMatches = !selectedTag || entry.tags.includes(selectedTag);
+    
+    return dateMatches && searchMatches && tagMatches;
+  });
 
   const addEntry = () => {
     if (newEntry.trim() || selectedImages.length > 0) {
+      // 選択された日付の時刻にエントリを作成
+      const entryDate = new Date(viewingDate);
+      entryDate.setHours(new Date().getHours(), new Date().getMinutes(), new Date().getSeconds());
+      
       const entry: TimelineEntry = {
         id: Date.now().toString(),
         content: newEntry,
-        timestamp: new Date().toISOString(),
+        timestamp: entryDate.toISOString(),
         likes: 0,
         comments: [],
         retweets: 0,
         isLiked: false,
         tags: extractTags(newEntry),
-        images: selectedImages.length > 0 ? [...selectedImages] : undefined
+        ...(selectedImages.length > 0 && { images: [...selectedImages] })
       };
       setEntries([entry, ...entries]);
       setNewEntry('');
@@ -66,8 +137,9 @@ const Timeline: React.FC<TimelineProps> = ({ selectedDate }) => {
   };
 
   const extractTags = (content: string): string[] => {
-    const tagRegex = /#[\w\u3042-\u3096\u30A1-\u30FC\u4E00-\u9FAF]+/g;
-    return content.match(tagRegex) || [];
+    const tagRegex = /#[\w\u3042-\u3096\u30A1-\u30FC\u4E00-\u9FAF\uFF01-\uFF60\u3000-\u303F]+/g;
+    const tags = content.match(tagRegex) || [];
+    return [...new Set(tags)];
   };
 
   const deleteEntry = (id: string) => {
@@ -99,9 +171,16 @@ const Timeline: React.FC<TimelineProps> = ({ selectedDate }) => {
 
   const formatContent = (content: string) => {
     // ハッシュタグを青色にする
-    return content.replace(/#[\w\u3042-\u3096\u30A1-\u30FC\u4E00-\u9FAF]+/g, 
-      '<span class="text-blue-500 dark:text-blue-400 font-medium">$&</span>'
+    let formatted = content.replace(/#[\w\u3042-\u3096\u30A1-\u30FC\u4E00-\u9FAF\uFF01-\uFF60\u3000-\u303F]+/g, 
+      '<span class="text-blue-500 dark:text-blue-400 font-medium cursor-pointer hover:underline">$&</span>'
     );
+    // URLをリンク化
+    formatted = formatted.replace(/(https?:\/\/[^\s]+)/g, 
+      '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-blue-500 dark:text-blue-400 underline hover:text-blue-600 dark:hover:text-blue-300">$1</a>'
+    );
+    // 改行を<br>タグに変換
+    formatted = formatted.replace(/\n/g, '<br>');
+    return formatted;
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -150,12 +229,20 @@ const Timeline: React.FC<TimelineProps> = ({ selectedDate }) => {
     setShowCommentsFor(showCommentsFor === entryId ? null : entryId);
   };
 
-  // 選択された日付のエントリをフィルタリング
-  const filteredEntries = selectedDate 
-    ? entries.filter(entry => 
-        new Date(entry.timestamp).toDateString() === selectedDate.toDateString()
-      )
-    : entries.slice(0, 20); // 最新20件
+  // タグ一覧を取得
+  const getAllTags = (): string[] => {
+    const allTags = new Set<string>();
+    entries.forEach(entry => {
+      entry.tags.forEach(tag => allTags.add(tag));
+    });
+    return Array.from(allTags).sort();
+  };
+
+  // ハッシュタグクリックハンドラ
+  const handleTagClick = (tag: string) => {
+    setSelectedTag(selectedTag === tag ? null : tag);
+  };
+
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 h-full flex flex-col">
@@ -164,22 +251,97 @@ const Timeline: React.FC<TimelineProps> = ({ selectedDate }) => {
           <MessageSquare className="w-6 h-6 text-blue-500" />
           <div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">タイムライン</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {selectedDate ? selectedDate.toLocaleDateString('ja-JP', { 
-                month: 'long', 
-                day: 'numeric',
-                weekday: 'short'
-              }) : '今日'}の記録
-            </p>
+            <div className="flex items-center space-x-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {viewingDate.toLocaleDateString('ja-JP', { 
+                  month: 'long', 
+                  day: 'numeric',
+                  weekday: 'short'
+                })}の記録
+              </p>
+              <button
+                onClick={() => {
+                  const today = new Date();
+                  setViewingDate(today);
+                }}
+                className="text-xs text-blue-500 hover:text-blue-600 underline"
+              >
+                今日
+              </button>
+            </div>
           </div>
         </div>
-        <button
-          onClick={() => setShowComposer(!showComposer)}
-          className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>投稿</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <div className="relative date-picker-container">
+            <button
+              onClick={() => setShowDatePicker(!showDatePicker)}
+              className="flex items-center justify-center w-8 h-8 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+              title="日付を選択"
+            >
+              <Calendar className="w-4 h-4" />
+            </button>
+            {showDatePicker && (
+              <div className="absolute top-full right-0 mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3">
+                <input
+                  type="date"
+                  value={viewingDate.toISOString().split('T')[0]}
+                  onChange={(e) => {
+                    setViewingDate(new Date(e.target.value));
+                    setShowDatePicker(false);
+                  }}
+                  className="bg-transparent text-sm text-gray-900 dark:text-white outline-none border-none"
+                  autoFocus
+                />
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setShowComposer(!showComposer)}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>投稿</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 検索フィルター */}
+      <div className="mb-4 space-y-3">
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="投稿を検索..."
+          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        
+        {/* タグフィルター */}
+        {getAllTags().length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center">タグ:</span>
+            {getAllTags().slice(0, 5).map((tag) => (
+              <button
+                key={tag}
+                onClick={() => handleTagClick(tag)}
+                className={`px-2 py-1 text-xs rounded-full border transition-colors ${
+                  selectedTag === tag
+                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-600'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                {tag}
+              </button>
+            ))}
+            {selectedTag && (
+              <button
+                onClick={() => setSelectedTag(null)}
+                className="px-2 py-1 text-xs rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-600 hover:bg-red-200 dark:hover:bg-red-800"
+              >
+                クリア
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 新しい投稿作成 */}
@@ -194,9 +356,9 @@ const Timeline: React.FC<TimelineProps> = ({ selectedDate }) => {
                 value={newEntry}
                 onChange={(e) => setNewEntry(e.target.value)}
                 placeholder="今何してる？ #ハッシュタグ で分類できます"
-                className="w-full px-3 py-3 border-none resize-none bg-transparent text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none text-xl"
-                rows={3}
-                maxLength={280}
+                className="w-full px-3 py-3 border-none resize-none bg-transparent text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none text-lg"
+                rows={4}
+                maxLength={500}
               />
               {/* 選択した画像のプレビュー */}
               {selectedImages.length > 0 && (
@@ -232,7 +394,7 @@ const Timeline: React.FC<TimelineProps> = ({ selectedDate }) => {
                     />
                   </label>
                   <div className="text-sm text-gray-500">
-                    {newEntry.length}/280
+                    {newEntry.length}/500
                   </div>
                 </div>
                 <div className="flex space-x-2">
@@ -297,9 +459,15 @@ const Timeline: React.FC<TimelineProps> = ({ selectedDate }) => {
                     </button>
                   </div>
                   <div className="mt-2">
-                    <p 
-                      className="text-gray-900 dark:text-white leading-relaxed"
+                    <div 
+                      className="text-gray-900 dark:text-white leading-relaxed prose max-w-none"
                       dangerouslySetInnerHTML={{ __html: formatContent(entry.content) }}
+                      onClick={(e) => {
+                        const target = e.target as HTMLElement;
+                        if (target.tagName === 'SPAN' && target.textContent?.startsWith('#')) {
+                          handleTagClick(target.textContent);
+                        }
+                      }}
                     />
                   </div>
 

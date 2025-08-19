@@ -25,10 +25,11 @@ const NotebookCreateModal: React.FC<NotebookCreateModalProps> = ({ isOpen, onClo
   const handleSave = () => {
     if (name.trim()) {
       tapFeedback();
+      const trimmedDescription = description.trim();
       addNotebook({
         name: name.trim(),
-        color: selectedColor,
-        description: description.trim() || undefined
+        color: selectedColor || '#3b82f6',
+        ...(trimmedDescription && { description: trimmedDescription })
       });
       successFeedback();
       handleClose();

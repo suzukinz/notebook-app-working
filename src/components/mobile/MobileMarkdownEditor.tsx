@@ -46,7 +46,7 @@ const MobileMarkdownEditor: React.FC<MobileMarkdownEditorProps> = ({ isOpen, onC
       updateNote(selectedNote.id, {
         title,
         pages: [{
-          id: selectedNote.pages[0]?.id || 1,
+          id: selectedNote.pages[0]?.id || '1', // ✅ ID統一修正: number → string
           title,
           content
         }],

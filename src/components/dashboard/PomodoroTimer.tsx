@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { RotateCcw, Settings } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { RotateCcw } from 'lucide-react';
 
 interface PomodoroSession {
   id: string;
@@ -18,16 +18,19 @@ interface PomodoroSettings {
   autoStartWork: boolean;
 }
 
-const PomodoroTimer: React.FC = () => {
-  const [time, setTime] = useState(25 * 60); // 25分 in seconds
+interface PomodoroTimerProps {
+  featured?: boolean;
+}
+
+const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ featured = false }) => {
+  const [time, setTime] = useState(0);
   const [isActive, setIsActive] = useState(false);
   const [currentSession, setCurrentSession] = useState<'work' | 'short_break' | 'long_break'>('work');
   const [sessionCount, setSessionCount] = useState(0);
   const [breakCount, setBreakCount] = useState(0);
   const [completedSessions, setCompletedSessions] = useState<PomodoroSession[]>([]);
-  const [showSettings, setShowSettings] = useState(false);
-  const [timerMode, setTimerMode] = useState<'countdown' | 'pomodoro'>('countdown'); // カウントダウン or ポモドーロ
   const [flipClock, setFlipClock] = useState<any>(null);
+  const [timerMode, setTimerMode] = useState<'month' | 'week' | 'day' | 'pomodoro'>('month');
   const [settings, setSettings] = useState<PomodoroSettings>({
     workDuration: 25,
     shortBreakDuration: 5,
@@ -40,7 +43,125 @@ const PomodoroTimer: React.FC = () => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const clockRef = useRef<HTMLDivElement>(null);
 
-  // ローカルストレージからデータを読み込む
+  // Define all callback functions first
+  const getTargetTime = useCallback((): number => {
+    const now = new Date();
+    let target = new Date();
+    
+    switch (timerMode) {
+      case 'month':
+        // 来月の0日目 = 今月の最終日
+        target = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        target.setHours(23, 59, 59, 999);
+        break;
+      case 'week':
+        // 日曜日を0として、土曜日(6)を週の最後とする
+        const dayOfWeek = now.getDay();
+        const daysUntilSaturday = dayOfWeek === 0 ? 6 : 6 - dayOfWeek; // 日曜日の場合は6日後、それ以外は土曜日まで
+        target = new Date(now);
+        target.setDate(now.getDate() + daysUntilSaturday);
+        target.setHours(23, 59, 59, 999);
+        break;
+      case 'day':
+        target = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        target.setHours(23, 59, 59, 999);
+        break;
+      default:
+        return now.getTime();
+    }
+    
+    // 既に過ぎている場合は次の期間を設定
+    if (target.getTime() <= now.getTime()) {
+      switch (timerMode) {
+        case 'month':
+          target = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+          target.setHours(23, 59, 59, 999);
+          break;
+        case 'week':
+          target.setDate(target.getDate() + 7);
+          break;
+        case 'day':
+          target.setDate(target.getDate() + 1);
+          break;
+      }
+    }
+    
+    return target.getTime();
+  }, [timerMode]);
+
+  const getDurationByType = useCallback((type: 'work' | 'short_break' | 'long_break'): number => {
+    switch (type) {
+      case 'work': return settings.workDuration;
+      case 'short_break': return settings.shortBreakDuration;
+      case 'long_break': return settings.longBreakDuration;
+    }
+  }, [settings.workDuration, settings.shortBreakDuration, settings.longBreakDuration]);
+
+  const playNotificationSound = useCallback(() => {
+    // 音を無効化（デバッグのため一時的にコメントアウト）
+    return;
+  }, []);
+
+  const handleNextSession = useCallback(() => {
+    if (currentSession === 'work') {
+      const isLongBreak = (sessionCount + 1) % settings.sessionsUntilLongBreak === 0;
+      const nextSession = isLongBreak ? 'long_break' : 'short_break';
+      setCurrentSession(nextSession);
+      setTime(getDurationByType(nextSession) * 60);
+      setIsActive(true);
+    } else {
+      setCurrentSession('work');
+      setTime(settings.workDuration * 60);
+      setIsActive(true);
+    }
+  }, [currentSession, sessionCount, settings.sessionsUntilLongBreak, settings.workDuration, getDurationByType]);
+
+  const handleSessionComplete = useCallback(() => {
+    setIsActive(false);
+    
+    const session: PomodoroSession = {
+      id: Date.now().toString(),
+      type: currentSession,
+      duration: getDurationByType(currentSession),
+      completedAt: new Date().toISOString()
+    };
+    
+    setCompletedSessions(prev => [session, ...prev]);
+    
+    if (currentSession === 'work') {
+      setSessionCount(prev => prev + 1);
+    } else {
+      setBreakCount(prev => prev + 1);
+    }
+
+    playNotificationSound();
+    handleNextSession();
+  }, [currentSession, getDurationByType, playNotificationSound, handleNextSession]);
+
+
+  const handleModeChange = useCallback((mode: 'month' | 'week' | 'day' | 'pomodoro') => {
+    setTimerMode(mode);
+    setIsActive(false);
+  }, []);
+
+  const toggleTimer = useCallback(() => {
+    setIsActive(!isActive);
+  }, [isActive]);
+
+  const resetTimer = useCallback(() => {
+    setIsActive(false);
+    if (timerMode === 'pomodoro') {
+      setTime(settings.workDuration * 60);
+      setCurrentSession('work');
+    } else {
+      const targetTime = getTargetTime();
+      const currentTime = new Date().getTime();
+      const remainingSeconds = Math.max(1, Math.floor((targetTime - currentTime) / 1000)); // 最小1秒を保証
+      setTime(remainingSeconds);
+    }
+  }, [timerMode, settings.workDuration, getTargetTime]);
+
+  // Now define useEffect hooks
   useEffect(() => {
     const savedSessions = localStorage.getItem('pomodoro-sessions');
     const savedSettings = localStorage.getItem('pomodoro-settings');
@@ -51,7 +172,13 @@ const PomodoroTimer: React.FC = () => {
       setCompletedSessions(JSON.parse(savedSessions));
     }
     if (savedSettings) {
-      setSettings(JSON.parse(savedSettings));
+      const loadedSettings = JSON.parse(savedSettings);
+      setSettings(loadedSettings);
+      if (timerMode === 'pomodoro') {
+        setTime(loadedSettings.workDuration * 60);
+      }
+    } else if (timerMode === 'pomodoro') {
+      setTime(settings.workDuration * 60);
     }
     if (savedSessionCount) {
       setSessionCount(parseInt(savedSessionCount));
@@ -59,39 +186,68 @@ const PomodoroTimer: React.FC = () => {
     if (savedBreakCount) {
       setBreakCount(parseInt(savedBreakCount));
     }
-  }, []);
+  }, [timerMode, settings.workDuration]);
 
-  // FlipClock初期化
+  useEffect(() => {
+    if (timerMode === 'pomodoro') {
+      setTime(settings.workDuration * 60);
+      setIsActive(false);
+    } else {
+      const targetTime = getTargetTime();
+      const currentTime = new Date().getTime();
+      const remainingSeconds = Math.max(1, Math.floor((targetTime - currentTime) / 1000)); // 最小1秒を保証
+      setTime(remainingSeconds);
+      setIsActive(false);
+    }
+  }, [timerMode, settings.workDuration, getTargetTime]);
+
   useEffect(() => {
     const initializeClock = () => {
       if (clockRef.current && (window as any).$) {
         const $ = (window as any).$;
         
-        // 既存のFlipClockを停止・削除
+        // 既存のFlipClockを停止して削除
         if (flipClock) {
           try {
             flipClock.stop();
-            setFlipClock(null);
           } catch (error) {
-            console.log('FlipClock stop error:', error);
+            // FlipClock stop error handled silently
           }
         }
         
-        // DOMを完全にクリア
+        // DOM要素をクリア
         $(clockRef.current).empty();
         
-        // 少し待ってから新しいFlipClockを初期化
+        // 新しいFlipClockインスタンスを作成
         setTimeout(() => {
-          if (timerMode === 'countdown') {
-            initCountdownClock($);
+          if (!clockRef.current) return;
+          
+          if (timerMode === 'pomodoro') {
+            const clock = $(clockRef.current).FlipClock(time, {
+              clockFace: 'MinuteCounter',
+              countdown: true,
+              autoStart: false
+            });
+            setFlipClock(clock);
           } else {
-            initPomodoroClock($);
+            const targetTime = getTargetTime();
+            const currentTime = new Date().getTime();
+            const remainingSeconds = Math.max(1, Math.floor((targetTime - currentTime) / 1000));
+            
+            const clock = $(clockRef.current).FlipClock(remainingSeconds, {
+              clockFace: 'HourlyCounter',
+              countdown: true,
+              autoStart: false
+            });
+            
+            setFlipClock(clock);
+            setTime(remainingSeconds);
           }
+          
         }, 100);
       }
     };
 
-    // jQueryとFlipClockが利用可能になるまで待つ
     if ((window as any).$) {
       initializeClock();
     } else {
@@ -108,64 +264,23 @@ const PomodoroTimer: React.FC = () => {
         try {
           flipClock.stop();
         } catch (error) {
-          console.log('FlipClock stop error:', error);
+          // FlipClock stop error handled silently
         }
       }
     };
-  }, [timerMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timerMode]); // FlipClockはtimerModeが変わったときだけ再初期化
 
-  const initCountdownClock = ($: any) => {
-    // 月末まで・週末までの残り時間を計算
-    const now = new Date();
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-    const endOfWeek = new Date(now);
-    endOfWeek.setDate(now.getDate() + (7 - now.getDay())); // 次の日曜日
-    endOfWeek.setHours(23, 59, 59, 999);
-    
-    // 月末までの残り時間（秒）
-    const diffMonth = Math.floor((endOfMonth.getTime() - now.getTime()) / 1000);
-    
-    try {
-      const clock = $(clockRef.current).FlipClock(diffMonth, {
-        clockFace: 'HourlyCounter',
-        countdown: true,
-        autoStart: true
-      });
-      
-      setFlipClock(clock);
-    } catch (error) {
-      console.error('FlipClock initialization error:', error);
-    }
-  };
-
-  const initPomodoroClock = ($: any) => {
-    // ポモドーロモード: MM:SS形式で表示
-    try {
-      const clock = $(clockRef.current).FlipClock(time, {
-        clockFace: 'MinuteCounter',
-        countdown: true,
-        autoStart: false
-      });
-      
-      setFlipClock(clock);
-    } catch (error) {
-      console.error('FlipClock initialization error:', error);
-    }
-  };
-
-  // ポモドーロモードでFlipClockを更新
   useEffect(() => {
     if (flipClock && timerMode === 'pomodoro') {
       try {
-        // FlipClockの表示を更新（秒で）
         flipClock.setTime(time);
       } catch (error) {
-        console.log('FlipClock update error:', error);
+        // FlipClock update error handled silently
       }
     }
-  }, [time, timerMode, flipClock]);
+  }, [time, flipClock, timerMode]);
 
-  // データをローカルストレージに保存
   useEffect(() => {
     localStorage.setItem('pomodoro-sessions', JSON.stringify(completedSessions));
   }, [completedSessions]);
@@ -182,17 +297,37 @@ const PomodoroTimer: React.FC = () => {
     localStorage.setItem('pomodoro-break-count', breakCount.toString());
   }, [breakCount]);
 
-  // タイマーの実行（ポモドーロモードのみ）
   useEffect(() => {
-    if (timerMode === 'pomodoro' && isActive && time > 0) {
+    if (isActive && time > 0) {
       intervalRef.current = setInterval(() => {
         setTime(prevTime => {
-          const newTime = prevTime - 1;
+          const newTime = Math.max(0, prevTime - 1);
+          
+          if (timerMode !== 'pomodoro' && flipClock) {
+            try {
+              flipClock.setTime(newTime);
+            } catch (error) {
+              // FlipClock countdown update error handled silently
+            }
+          }
+          
           return newTime;
         });
       }, 1000);
-    } else if (time === 0) {
-      handleSessionComplete();
+    } else if (time <= 0 && timerMode === 'pomodoro') {
+      if (isActive) {
+        handleSessionComplete();
+      }
+    } else if (time <= 0 && timerMode !== 'pomodoro') {
+      setIsActive(false);
+      playNotificationSound();
+      // カウントダウン終了後、次の期間を自動的に設定
+      setTimeout(() => {
+        const targetTime = getTargetTime();
+        const currentTime = new Date().getTime();
+        const remainingSeconds = Math.max(1, Math.floor((targetTime - currentTime) / 1000));
+        setTime(remainingSeconds);
+      }, 1000);
     }
 
     return () => {
@@ -200,85 +335,59 @@ const PomodoroTimer: React.FC = () => {
         clearInterval(intervalRef.current);
       }
     };
-  }, [isActive, time, timerMode]);
+  }, [isActive, time, timerMode, flipClock, handleSessionComplete, playNotificationSound, getTargetTime]);
 
-  const handleSessionComplete = () => {
-    setIsActive(false);
-    
-    // 完了したセッションを記録
-    const session: PomodoroSession = {
-      id: Date.now().toString(),
-      type: currentSession,
-      duration: getDurationByType(currentSession),
-      completedAt: new Date().toISOString()
-    };
-    
-    setCompletedSessions(prev => [session, ...prev]);
-    
-    // セッション数を更新
-    if (currentSession === 'work') {
-      setSessionCount(prev => prev + 1);
+  const formatTime = (seconds: number) => {
+    if (timerMode === 'pomodoro') {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     } else {
-      setBreakCount(prev => prev + 1);
+      const days = Math.floor(seconds / 86400);
+      const hours = Math.floor((seconds % 86400) / 3600);
+      const mins = Math.floor((seconds % 3600) / 60);
+      const secs = seconds % 60;
+      
+      if (days > 0) {
+        return `${days}日 ${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      } else if (hours > 0) {
+        return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      } else {
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      }
     }
-
-    // 通知音を再生
-    playNotificationSound();
-    
-    // 次のセッションを開始
-    handleNextSession();
   };
 
-  const handleNextSession = () => {
-    if (currentSession === 'work') {
-      const isLongBreak = (sessionCount + 1) % settings.sessionsUntilLongBreak === 0;
-      const nextSession = isLongBreak ? 'long_break' : 'short_break';
-      setCurrentSession(nextSession);
-      setTime(getDurationByType(nextSession) * 60);
-      
-      // 自動で次のセッションを開始
-      setIsActive(true);
+  const getProgressPercentage = () => {
+    if (timerMode === 'pomodoro') {
+      const maxTime = getDurationByType(currentSession) * 60;
+      return Math.max(0, Math.min(100, ((maxTime - time) / maxTime) * 100));
     } else {
-      setCurrentSession('work');
-      setTime(settings.workDuration * 60);
+      // カウントダウンモードでは、今日の開始時間から終了時間までの進行率を計算
+      const now = new Date();
+      const startOfPeriod = new Date();
+      const targetTime = getTargetTime();
       
-      // 自動で次のセッションを開始
-      setIsActive(true);
+      switch (timerMode) {
+        case 'day':
+          startOfPeriod.setHours(0, 0, 0, 0);
+          break;
+        case 'week':
+          const dayOfWeek = now.getDay();
+          const startOfWeek = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // 月曜日を週の開始とする
+          startOfPeriod.setDate(now.getDate() - startOfWeek);
+          startOfPeriod.setHours(0, 0, 0, 0);
+          break;
+        case 'month':
+          startOfPeriod.setDate(1);
+          startOfPeriod.setHours(0, 0, 0, 0);
+          break;
+      }
+      
+      const totalDuration = targetTime - startOfPeriod.getTime();
+      const elapsed = now.getTime() - startOfPeriod.getTime();
+      return Math.max(0, Math.min(100, (elapsed / totalDuration) * 100));
     }
-  };
-
-  const getDurationByType = (type: 'work' | 'short_break' | 'long_break'): number => {
-    switch (type) {
-      case 'work': return settings.workDuration;
-      case 'short_break': return settings.shortBreakDuration;
-      case 'long_break': return settings.longBreakDuration;
-    }
-  };
-
-  const playNotificationSound = () => {
-    if ('AudioContext' in window || 'webkitAudioContext' in window) {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-      
-      oscillator.start();
-      oscillator.stop(audioContext.currentTime + 0.1);
-    }
-  };
-
-  const toggleTimer = () => {
-    setIsActive(!isActive);
-  };
-
-  const resetTimer = () => {
-    setIsActive(false);
-    setTime(getDurationByType(currentSession) * 60);
   };
 
 
@@ -290,231 +399,138 @@ const PomodoroTimer: React.FC = () => {
     }
   };
 
-  const todaysSessions = completedSessions.filter(session => 
-    new Date(session.completedAt).toDateString() === new Date().toDateString()
-  );
-
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 h-full flex flex-col">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-3">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">ポモドーロタイマー</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400">{getSessionLabel()}</p>
+    <div className={`${featured ? 'bg-transparent text-white relative' : 'bg-white dark:bg-gray-800'} rounded-lg shadow-sm ${featured ? 'p-4 sm:p-6 md:p-8' : 'p-4 sm:p-6'} h-full flex flex-col relative`}>
+      {/* ヘッダー */}
+      <div className="flex items-center justify-center mb-6">
+        <h3 className={`text-lg font-semibold ${featured ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+          {timerMode === 'pomodoro' ? getSessionLabel() : 'カウントダウン'}
+        </h3>
+      </div>
+
+      {/* モード切り替えスイッチ - 中央配置 */}
+      <div className="flex justify-center mb-6">
+        <div className="timer-switch-control">
+          <div className="timer-switch-track">
+            <div className="timer-switch-indicator"></div>
+            <input 
+              className="sr-only" 
+              type="radio" 
+              name="timer-mode" 
+              id="month-mode" 
+              checked={timerMode === 'month'} 
+              onChange={() => handleModeChange('month')}
+            />
+            <label htmlFor="month-mode">月末</label>
+            
+            <input 
+              className="sr-only" 
+              type="radio" 
+              name="timer-mode" 
+              id="week-mode" 
+              checked={timerMode === 'week'} 
+              onChange={() => handleModeChange('week')}
+            />
+            <label htmlFor="week-mode">週末</label>
+            
+            <input 
+              className="sr-only" 
+              type="radio" 
+              name="timer-mode" 
+              id="day-mode" 
+              checked={timerMode === 'day'} 
+              onChange={() => handleModeChange('day')}
+            />
+            <label htmlFor="day-mode">今日</label>
+            
+            <input 
+              className="sr-only" 
+              type="radio" 
+              name="timer-mode" 
+              id="pomodoro-mode" 
+              checked={timerMode === 'pomodoro'} 
+              onChange={() => handleModeChange('pomodoro')}
+            />
+            <label htmlFor="pomodoro-mode">ポモ</label>
           </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          {/* タイマーモード切り替え */}
-          <div className="flex items-center space-x-2 px-3 py-1 bg-gray-50 dark:bg-gray-700 rounded-lg">
-            <span className="text-xs text-gray-600 dark:text-gray-400">カウントダウン</span>
-            <button
-              onClick={() => setTimerMode(timerMode === 'countdown' ? 'pomodoro' : 'countdown')}
-              className="relative inline-flex h-6 w-12 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              style={{
-                backgroundColor: timerMode === 'countdown' ? '#3b82f6' : '#f59e0b'
-              }}
-            >
-              <span className="sr-only">タイマーモード切り替え</span>
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
-                  timerMode === 'countdown' ? 'translate-x-1' : 'translate-x-7'
-                }`}
-              />
-            </button>
-            <span className="text-xs text-gray-600 dark:text-gray-400">ポモドーロ</span>
-          </div>
-          {/* リセットボタン（ポモドーロモードのみ） */}
-          {timerMode === 'pomodoro' && (
-            <button
-              onClick={resetTimer}
-              className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
-              title="リセット"
-            >
-              <RotateCcw className="w-5 h-5" />
-            </button>
-          )}
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
         </div>
       </div>
 
-      {/* 設定パネル */}
-      {showSettings && (
-        <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">作業時間（分）</label>
-              <input
-                type="number"
-                value={settings.workDuration}
-                onChange={(e) => setSettings({...settings, workDuration: parseInt(e.target.value)})}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                min="1"
-                max="60"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">短い休憩（分）</label>
-              <input
-                type="number"
-                value={settings.shortBreakDuration}
-                onChange={(e) => setSettings({...settings, shortBreakDuration: parseInt(e.target.value)})}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                min="1"
-                max="30"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">長い休憩（分）</label>
-              <input
-                type="number"
-                value={settings.longBreakDuration}
-                onChange={(e) => setSettings({...settings, longBreakDuration: parseInt(e.target.value)})}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                min="1"
-                max="60"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">長い休憩までのセッション数</label>
-              <input
-                type="number"
-                value={settings.sessionsUntilLongBreak}
-                onChange={(e) => setSettings({...settings, sessionsUntilLongBreak: parseInt(e.target.value)})}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                min="1"
-                max="10"
-              />
-            </div>
-          </div>
-          <div className="mt-4 text-xs text-gray-500 dark:text-gray-400 text-center">
-            ※ セッションは自動で切り替わります
-          </div>
-        </div>
-      )}
-
-      {/* FlipClock タイマー表示部分 */}
-      <div className="flex-1 flex flex-col items-center justify-center">
-        <div className="mb-6">
-          <div className="text-center mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              {timerMode === 'countdown' ? '残り時間' : 'ポモドーロタイマー'}
-            </h3>
-            {timerMode === 'pomodoro' && (
-              <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                <p>{getSessionLabel()}</p>
-                <div className="flex justify-center space-x-4">
-                  <span className="bg-blue-100 dark:bg-blue-900 px-3 py-1 rounded text-sm font-medium">
-                    セッション: {sessionCount}
-                  </span>
-                  <span className="bg-green-100 dark:bg-green-900 px-3 py-1 rounded text-sm font-medium">
-                    休憩: {breakCount}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* FlipClock */}
+      {/* FlipClock表示エリア - 完全中央配置 */}
+      <div className="flex-1 flex items-center justify-center mb-6">
+        <div className="w-full flex justify-center items-center">
           <div 
-            ref={clockRef} 
-            className="clock"
-            style={{
-              width: '100%',
-              maxWidth: '650px',
-              margin: '0 auto',
-              display: 'flex',
-              justifyContent: 'center'
-            }}
-          />
-          
-          {timerMode === 'pomodoro' && (
-            <div className="mt-6 flex justify-center space-x-4">
-              <button
-                onClick={toggleTimer}
-                className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-300 transform hover:scale-105 ${
-                  isActive
-                    ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg hover:shadow-xl'
-                    : 'bg-green-500 hover:bg-green-600 text-white shadow-lg hover:shadow-xl'
-                }`}
-              >
-                {isActive ? '⏸ Stop' : '▶ Start'}
-              </button>
+            ref={clockRef}
+            className="text-4xl md:text-6xl font-bold text-center w-full flex justify-center items-center"
+          >
+            {/* フォールバック表示 */}
+            <div className={`timer-display-fallback ${featured ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+              {formatTime(time)}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
-      {/* 統計情報 */}
+      {/* プログレスバー */}
+      <div className="mb-6">
+        <div className={`w-full h-2 rounded-full ${featured ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-700'}`}>
+          <div 
+            className={`h-full rounded-full transition-all duration-1000 ${
+              featured ? 'bg-white' : 'bg-blue-500'
+            }`}
+            style={{ width: `${Math.min(100, Math.max(0, getProgressPercentage()))}%` }}
+          />
+        </div>
+      </div>
+
+      {/* コントロールボタン */}
+      <div className="flex justify-center space-x-4">
+        <button
+          onClick={toggleTimer}
+          className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+            featured
+              ? 'bg-white text-gray-900 hover:bg-gray-100'
+              : 'bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-600 dark:hover:bg-blue-700'
+          }`}
+        >
+          {isActive ? '一時停止' : '開始'}
+        </button>
+        
+        <button
+          onClick={resetTimer}
+          className={`p-2 rounded-lg transition-colors ${
+            featured
+              ? 'text-white hover:bg-white/20'
+              : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+          }`}
+        >
+          <RotateCcw className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* ポモドーロ統計 */}
       {timerMode === 'pomodoro' && (
         <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="grid grid-cols-2 gap-4 text-center">
             <div>
-              <div className="text-2xl font-bold text-red-500">{sessionCount}</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">今日の完了</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-green-500">{breakCount}</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">休憩回数</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-blue-500">
-                {Math.round(todaysSessions.filter(s => s.type === 'work').reduce((sum, s) => sum + s.duration, 0) / 60)}
+              <div className={`text-2xl font-bold ${featured ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+                {sessionCount}
               </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">集中時間(分)</div>
+              <div className={`text-sm ${featured ? 'text-white/80' : 'text-gray-600 dark:text-gray-400'}`}>
+                作業セッション
+              </div>
+            </div>
+            <div>
+              <div className={`text-2xl font-bold ${featured ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+                {breakCount}
+              </div>
+              <div className={`text-sm ${featured ? 'text-white/80' : 'text-gray-600 dark:text-gray-400'}`}>
+                休憩回数
+              </div>
             </div>
           </div>
         </div>
       )}
-
-      {/* FlipClock カスタマイズCSS */}
-      <style>{`
-        .clock {
-          position: relative !important;
-          display: flex !important;
-          justify-content: center !important;
-          align-items: center !important;
-        }
-        
-        /* FlipClockのカスタマイズ */
-        .flip-clock-wrapper {
-          text-align: center !important;
-          margin: 0 auto !important;
-          display: flex !important;
-          justify-content: center !important;
-          align-items: center !important;
-          width: 100% !important;
-        }
-        
-        .flip-clock-wrapper .flip-clock-digit {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          border: 2px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .flip-clock-wrapper .flip-clock-digit .flip-clock-digit-top {
-          color: white;
-          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-        }
-        
-        .flip-clock-wrapper .flip-clock-digit .flip-clock-digit-bottom {
-          color: white;
-          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-        }
-        
-        .flip-clock-wrapper .flip-clock-divider {
-          color: #667eea;
-        }
-        
-        .flip-clock-wrapper .flip-clock-divider .flip-clock-dot {
-          background: #667eea;
-        }
-      `}</style>
     </div>
   );
 };

@@ -89,9 +89,9 @@ const MonthlyGoals: React.FC<MonthlyGoalsProps> = () => {
         completed: false,
         progress: 0,
         category: newGoal.category,
-        targetDate: newGoal.targetDate || undefined,
         createdAt: new Date().toISOString(),
-        comments: []
+        comments: [],
+        ...(newGoal.targetDate && { targetDate: newGoal.targetDate })
       };
       setGoals([...goals, goal]);
       setNewGoal({ title: '', description: '', category: 'writing', targetDate: '' });
@@ -259,37 +259,37 @@ const MonthlyGoals: React.FC<MonthlyGoalsProps> = () => {
                   <div className="panel active">
                     <div className="flex items-start space-x-3">
                       <button
-                        onClick={() => updateProgress(goals[activeTab].id, goals[activeTab].completed ? 0 : 100)}
+                        onClick={() => updateProgress(goals[activeTab]!.id, goals[activeTab]!.completed ? 0 : 100)}
                         className={`mt-0.5 transition-colors flex-shrink-0 ${
-                          goals[activeTab].completed ? 'text-green-400' : 'text-gray-400 hover:text-purple-400'
+                          goals[activeTab]!.completed ? 'text-green-400' : 'text-gray-400 hover:text-purple-400'
                         }`}
                       >
-                        {goals[activeTab].completed ? <CheckCircle className="w-5 h-5" /> : <Circle className="w-5 h-5" />}
+                        {goals[activeTab]!.completed ? <CheckCircle className="w-5 h-5" /> : <Circle className="w-5 h-5" />}
                       </button>
                       
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-2">
                           <h4 className={`text-lg font-medium ${
-                            goals[activeTab].completed 
+                            goals[activeTab]!.completed 
                               ? 'text-green-300 line-through' 
                               : 'text-white'
                           }`}>
-                            {goals[activeTab].title}
+                            {goals[activeTab]!.title}
                           </h4>
                           <div className="flex items-center space-x-2">
-                            {goals[activeTab].comments.length > 0 && (
+                            {goals[activeTab]!.comments.length > 0 && (
                               <span className="text-xs text-gray-400">
-                                {goals[activeTab].comments.length}
+                                {goals[activeTab]!.comments.length}
                               </span>
                             )}
                             <button
-                              onClick={() => toggleComments(goals[activeTab].id)}
+                              onClick={() => toggleComments(goals[activeTab]!.id)}
                               className="text-gray-400 hover:text-purple-400 transition-colors"
                             >
                               <MessageCircle className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => deleteGoal(goals[activeTab].id)}
+                              onClick={() => deleteGoal(goals[activeTab]!.id)}
                               className="text-gray-400 hover:text-red-400 transition-colors"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -297,37 +297,37 @@ const MonthlyGoals: React.FC<MonthlyGoalsProps> = () => {
                           </div>
                         </div>
                         
-                        {goals[activeTab].description && (
+                        {goals[activeTab]!.description && (
                           <p className={`text-sm mb-3 ${
-                            goals[activeTab].completed 
+                            goals[activeTab]!.completed 
                               ? 'text-green-400/80' 
                               : 'text-gray-300'
                           }`}>
-                            {goals[activeTab].description}
+                            {goals[activeTab]!.description}
                           </p>
                         )}
                         
-                        {!goals[activeTab].completed && goals[activeTab].progress > 0 && (
+                        {!goals[activeTab]!.completed && goals[activeTab]!.progress > 0 && (
                           <div className="mb-3">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-xs text-gray-400">進捗</span>
-                              <span className="text-xs text-purple-400">{goals[activeTab].progress}%</span>
+                              <span className="text-xs text-purple-400">{goals[activeTab]!.progress}%</span>
                             </div>
                             <div className="bg-gray-700 rounded-full h-1.5">
                               <div 
                                 className="bg-gradient-to-r from-purple-500 to-indigo-500 h-1.5 rounded-full transition-all duration-300"
-                                style={{ width: `${goals[activeTab].progress}%` }}
+                                style={{ width: `${goals[activeTab]!.progress}%` }}
                               />
                             </div>
                           </div>
                         )}
 
                         {/* コメント表示・追加 */}
-                        {showComments === goals[activeTab].id && (
+                        {showComments === goals[activeTab]!.id && (
                           <div className="mt-3 space-y-2">
-                            {goals[activeTab].comments.length > 0 && (
+                            {goals[activeTab]!.comments.length > 0 && (
                               <div className="space-y-1">
-                                {goals[activeTab].comments.map((comment, index) => (
+                                {goals[activeTab]!.comments.map((comment, index) => (
                                   <div key={index} className="text-sm text-gray-300 bg-gray-700/50 p-2 rounded">
                                     {comment}
                                   </div>
@@ -339,12 +339,12 @@ const MonthlyGoals: React.FC<MonthlyGoalsProps> = () => {
                                 type="text"
                                 value={newComment}
                                 onChange={(e) => setNewComment(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && addComment(goals[activeTab].id)}
+                                onKeyPress={(e) => e.key === 'Enter' && addComment(goals[activeTab]!.id)}
                                 placeholder="コメントを追加..."
                                 className="flex-1 px-2 py-1 text-sm bg-gray-700 text-white rounded border border-gray-600 focus:border-purple-500 focus:outline-none"
                               />
                               <button
-                                onClick={() => addComment(goals[activeTab].id)}
+                                onClick={() => addComment(goals[activeTab]!.id)}
                                 disabled={!newComment.trim()}
                                 className="px-2 py-1 bg-purple-500 text-white rounded text-sm hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
                               >

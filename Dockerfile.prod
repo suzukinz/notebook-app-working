@@ -1,0 +1,83 @@
+# Production Dockerfile for NoteSpace AI
+# Multi-stage build for optimized production image
+
+# Build stage
+FROM node:18-alpine AS builder
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Install dependencies
+RUN npm ci --only=production --ignore-scripts
+
+# Copy source code
+COPY src/ ./src/
+COPY public/ ./public/
+
+# Build the application
+RUN npm run build
+
+# Production stage
+FROM node:18-alpine AS production
+
+# Install system dependencies
+RUN apk add --no-cache \
+    curl \
+    dumb-init \
+    && rm -rf /var/cache/apk/*
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production --ignore-scripts && \
+    npm cache clean --force
+
+# Copy built application from builder stage
+COPY --from=builder --chown=nextjs:nodejs /app/build ./build
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# Copy necessary configuration files
+COPY --chown=nextjs:nodejs config/ ./config/
+COPY --chown=nextjs:nodejs scripts/ ./scripts/
+
+# Create necessary directories with correct permissions
+RUN mkdir -p logs uploads cache/ai models && \
+    chown -R nextjs:nodejs logs uploads cache models
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=3001
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:3001/health || exit 1
+
+# Switch to non-root user
+USER nextjs
+
+# Expose port
+EXPOSE 3001
+
+# Use dumb-init for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start the application
+CMD ["npm", "start"]
+
+# Metadata
+LABEL maintainer="NoteSpace Team"
+LABEL version="1.0.0"
+LABEL description="NoteSpace AI - Production Ready Note-taking App with AI Integration"

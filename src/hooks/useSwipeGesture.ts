@@ -36,7 +36,10 @@ export const useSwipeGesture = ({
   const { tapFeedback, selectionFeedback } = useHaptics();
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    startX.current = e.touches[0].clientX;
+    const touch = e.touches[0];
+    if (!touch) return;
+    
+    startX.current = touch.clientX;
     isDragging.current = true;
     setIsActive(true);
     onSwipeStart?.();
@@ -45,7 +48,10 @@ export const useSwipeGesture = ({
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!isDragging.current) return;
 
-    currentX.current = e.touches[0].clientX;
+    const touch = e.touches[0];
+    if (!touch) return;
+    
+    currentX.current = touch.clientX;
     const diff = currentX.current - startX.current;
     
     // 左右どちらにスワイプしているかを判定
@@ -79,7 +85,7 @@ export const useSwipeGesture = ({
       if (actions.length > 0) {
         // 最初のアクションを実行（複数アクションの場合は拡張可能）
         tapFeedback();
-        actions[0].onAction();
+        actions[0]?.onAction();
       }
     }
 

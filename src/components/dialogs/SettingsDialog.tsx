@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { safeReload } from '../../utils/safeReload';
 import Modal from '../ui/Modal';
 import { Download, Upload, Trash2, Database, Info, Image, Smartphone, Shield, BarChart3, Palette } from 'lucide-react';
 import { useNotebookStore } from '../../store/useNotebookStore';
@@ -36,7 +37,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
   const handleClearData = () => {
     if (window.confirm('すべてのデータを削除しますか？この操作は取り消せません。')) {
       localStorage.removeItem('notebook-store');
-      window.location.reload();
+      safeReload();
     }
   };
 

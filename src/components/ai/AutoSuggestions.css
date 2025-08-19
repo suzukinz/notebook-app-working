@@ -1,0 +1,355 @@
+/* Auto Suggestions Component Styles */
+
+.auto-suggestions {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  z-index: 1000;
+}
+
+.auto-suggestions--inline {
+  position: relative;
+  width: 100%;
+}
+
+.auto-suggestions--sidebar {
+  position: fixed;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 300px;
+}
+
+.auto-suggestions--floating {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 320px;
+  max-height: 400px;
+}
+
+/* Loading State */
+.suggestions-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-size: 14px;
+  color: #4a5568;
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Suggestions Container */
+.suggestions-container {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+.suggestions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.suggestions-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.close-suggestions {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+  border-radius: 4px;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.close-suggestions:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Suggestions List */
+.suggestions-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.suggestion-item {
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #667eea;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #ffffff;
+}
+
+.suggestion-item:last-child {
+  margin-bottom: 0;
+}
+
+.suggestion-item:hover {
+  background: #f7fafc;
+  border-color: #cbd5e0;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.suggestion-item--active {
+  background: #edf2f7;
+  border-color: #a0aec0;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+.suggestion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.suggestion-type {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.suggestion-icon {
+  font-size: 14px;
+}
+
+.suggestion-context {
+  font-size: 12px;
+  color: #718096;
+  font-weight: 500;
+}
+
+.suggestion-confidence {
+  font-size: 11px;
+  background: #edf2f7;
+  color: #4a5568;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.suggestion-content {
+  font-size: 13px;
+  color: #2d3748;
+  line-height: 1.4;
+  padding-left: 22px; /* Align with icon */
+}
+
+/* Footer */
+.suggestions-footer {
+  padding: 8px 16px;
+  background: #f7fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.keyboard-hint {
+  font-size: 11px;
+  color: #718096;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.keyboard-hint kbd {
+  background: #e2e8f0;
+  color: #4a5568;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid #cbd5e0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Specific suggestion type styles */
+.suggestion-item[style*="667eea"] .suggestion-context {
+  color: #667eea;
+}
+
+.suggestion-item[style*="48bb78"] .suggestion-context {
+  color: #48bb78;
+}
+
+.suggestion-item[style*="f6ad55"] .suggestion-context {
+  color: #f6ad55;
+}
+
+.suggestion-item[style*="4fd1c7"] .suggestion-context {
+  color: #4fd1c7;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .auto-suggestions--sidebar,
+  .auto-suggestions--floating {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+    max-height: 300px;
+  }
+  
+  .suggestions-container {
+    max-height: 250px;
+  }
+  
+  .suggestion-content {
+    padding-left: 0;
+  }
+  
+  .keyboard-hint {
+    display: none; /* Hide keyboard hints on mobile */
+  }
+}
+
+/* Animation for appearance */
+.suggestions-container {
+  animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .suggestions-loading {
+    background: #2d3748;
+    border-color: #4a5568;
+    color: #e2e8f0;
+  }
+  
+  .suggestions-container {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+  
+  .suggestions-header h4 {
+    color: white;
+  }
+  
+  .suggestion-item {
+    background: #2d3748;
+    border-color: #4a5568;
+    color: #e2e8f0;
+  }
+  
+  .suggestion-item:hover {
+    background: #4a5568;
+    border-color: #718096;
+  }
+  
+  .suggestion-item--active {
+    background: #4a5568;
+    border-color: #718096;
+  }
+  
+  .suggestion-context {
+    color: #cbd5e0;
+  }
+  
+  .suggestion-confidence {
+    background: #4a5568;
+    color: #e2e8f0;
+  }
+  
+  .suggestion-content {
+    color: #e2e8f0;
+  }
+  
+  .suggestions-footer {
+    background: #2a3441;
+    border-top-color: #4a5568;
+  }
+  
+  .keyboard-hint {
+    color: #cbd5e0;
+  }
+  
+  .keyboard-hint kbd {
+    background: #4a5568;
+    color: #e2e8f0;
+    border-color: #718096;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .suggestion-item {
+    border-width: 2px;
+  }
+  
+  .suggestion-item--active {
+    border-width: 3px;
+  }
+  
+  .suggestion-confidence {
+    font-weight: 700;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner {
+    animation: none;
+  }
+  
+  .suggestions-container {
+    animation: none;
+  }
+  
+  .suggestion-item {
+    transition: none;
+  }
+  
+  .close-suggestions {
+    transition: none;
+  }
+}

@@ -113,7 +113,7 @@ export class MarkdownSearchReplace {
     }
 
     // 最初のマッチのみを置換
-    const firstMatch = matches[0];
+    const firstMatch = matches[0]!;
     const newText = text.substring(0, firstMatch.start) + 
                    replaceTerm + 
                    text.substring(firstMatch.end);
@@ -175,7 +175,7 @@ export class MarkdownSearchReplace {
     if (nextMatch) return nextMatch;
     
     // 見つからない場合は最初のマッチを返す（循環検索）
-    return matches.length > 0 ? matches[0] : null;
+    return matches.length > 0 ? matches[0]! : null;
   }
 
   // 前のマッチを検索
@@ -193,7 +193,7 @@ export class MarkdownSearchReplace {
     if (prevMatch) return prevMatch;
     
     // 見つからない場合は最後のマッチを返す（循環検索）
-    return matches.length > 0 ? matches[matches.length - 1] : null;
+    return matches.length > 0 ? matches[matches.length - 1]! : null;
   }
 
   // 行と列の番号を取得
@@ -206,7 +206,7 @@ export class MarkdownSearchReplace {
       const lines = text.substring(0, position).split('\n');
       return {
         line: lines.length,
-        column: lines[lines.length - 1].length + 1
+        column: lines[lines.length - 1]!.length + 1
       };
     } catch (error) {
       console.warn('Failed to get line column:', error);

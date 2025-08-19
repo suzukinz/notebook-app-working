@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronRight, ChevronDown, Home, Folder, BookOpen, FileText, MoreHorizontal } from 'lucide-react';
 import { useNotebookStore } from '../../store/useNotebookStore';
 import { useHaptics } from '../../hooks/useHaptics';
@@ -38,7 +38,7 @@ const SmartBreadcrumb: React.FC<SmartBreadcrumbProps> = ({ currentView, onNaviga
   } = useNotebookStore();
 
   // ブレッドクラムアイテムを構築
-  const buildBreadcrumbItems = (): BreadcrumbItem[] => {
+  const buildBreadcrumbItems = useCallback((): BreadcrumbItem[] => {
     const items: BreadcrumbItem[] = [];
 
     // ワークスペース
@@ -109,7 +109,7 @@ const SmartBreadcrumb: React.FC<SmartBreadcrumbProps> = ({ currentView, onNaviga
     }
 
     return items;
-  };
+  }, [selectedWorkspace, workspaces, selectedNotebook, currentView, notebooks, selectedSubFolder, subFoldersData, selectedNote, selectionFeedback, onNavigate, setSelectedNotebook, setSelectedSubFolder]);
 
   // 利用可能な幅を計算
   const calculateAvailableWidth = () => {
@@ -121,7 +121,7 @@ const SmartBreadcrumb: React.FC<SmartBreadcrumbProps> = ({ currentView, onNaviga
   };
 
   // 表示可能なアイテムを計算
-  const calculateVisibleItems = (items: BreadcrumbItem[]) => {
+  const calculateVisibleItems = useCallback((items: BreadcrumbItem[]) => {
     if (!availableWidth || items.length === 0) {
       setVisibleItems(items);
       setHiddenItems([]);
@@ -149,6 +149,8 @@ const SmartBreadcrumb: React.FC<SmartBreadcrumbProps> = ({ currentView, onNaviga
     // 残りのアイテムを逆順でチェック
     for (let i = items.length - 2; i >= 0; i--) {
       const item = items[i];
+      if (!item) continue;
+      
       const itemWidth = estimateItemWidth(item);
       
       if (totalWidth + itemWidth + 30 <= availableWidth) { // 30pxはセパレーター用
@@ -161,7 +163,7 @@ const SmartBreadcrumb: React.FC<SmartBreadcrumbProps> = ({ currentView, onNaviga
 
     setVisibleItems(visible);
     setHiddenItems(hidden);
-  };
+  }, [availableWidth, setVisibleItems, setHiddenItems]);
 
   // リサイズ監視
   useEffect(() => {
@@ -185,7 +187,7 @@ const SmartBreadcrumb: React.FC<SmartBreadcrumbProps> = ({ currentView, onNaviga
   useEffect(() => {
     const items = buildBreadcrumbItems();
     calculateVisibleItems(items);
-  }, [selectedWorkspace, selectedNotebook, selectedSubFolder, selectedNote, currentView, availableWidth]);
+  }, [selectedWorkspace, selectedNotebook, selectedSubFolder, selectedNote, currentView, availableWidth, buildBreadcrumbItems, calculateVisibleItems]);
 
   const handleDropdownToggle = () => {
     tapFeedback();

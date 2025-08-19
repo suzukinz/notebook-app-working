@@ -35,8 +35,8 @@ const MarkdownTableEditorComponent: React.FC<MarkdownTableEditorProps> = ({
   const handleCellClick = (rowIndex: number, colIndex: number) => {
     tapFeedback();
     const content = rowIndex === -1 
-      ? editingTable.headers[colIndex].content 
-      : editingTable.rows[rowIndex].cells[colIndex].content;
+      ? editingTable.headers[colIndex]?.content || ''
+      : editingTable.rows[rowIndex]?.cells[colIndex]?.content || '';
     
     setEditingCell({ row: rowIndex, col: colIndex });
     setCellValue(content);

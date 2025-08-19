@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { ChevronRight, ChevronDown, BookOpen, Folder, Plus, FolderPlus, BookPlus, Trash2 } from 'lucide-react';
 import { useNotebookStore } from '../../store/useNotebookStore';
+import { useIndexedDBStore } from '../../store/useIndexedDBStore';
 
 interface NotebookTreeProps {
   selectedWorkspace: string;
@@ -31,7 +32,30 @@ const NotebookTree: React.FC<NotebookTreeProps> = ({
   onAddNotebookClick,
   className = ''
 }) => {
-  const { subFoldersData, addNoteToSubFolder, notebooks, deleteNotebook, deleteSubFolder } = useNotebookStore();
+  const { subFoldersData, addNoteToSubFolder, notebooks, deleteNotebook, deleteSubFolder, notesData } = useNotebookStore();
+  const { setViewMode } = useIndexedDBStore();
+  
+  // 実際のノート数を計算する関数
+  const getActualNoteCount = (subFolderId: string) => {
+    const notes = notesData[subFolderId] || [];
+    return notes.length;
+  };
+  
+  // ノートブックの実際のサブフォルダ数を計算
+  const getActualSubFolderCount = (notebookId: string) => {
+    const subFolders = subFoldersData[notebookId] || [];
+    return subFolders.length;
+  };
+  
+  console.log('🌳 NotebookTree render:', {
+    selectedWorkspace,
+    selectedNotebook,
+    selectedSubFolder,
+    notebooks: notebooks[selectedWorkspace] || [],
+    subFoldersData: subFoldersData[selectedNotebook] || [],
+    notesDataKeys: Object.keys(notesData),
+    notesDataSample: Object.entries(notesData).slice(0, 3)
+  });
   
   const handleDeleteNotebook = useCallback((e: React.MouseEvent, notebookId: string) => {
     e.stopPropagation();
@@ -116,7 +140,11 @@ const NotebookTree: React.FC<NotebookTreeProps> = ({
             </button>
             <div 
               className="flex items-center min-w-0 flex-1 cursor-pointer"
-              onClick={() => onNotebookSelect(notebook.id)}
+              onClick={() => {
+                onNotebookSelect(notebook.id);
+                onSubFolderSelect(''); // サブフォルダを選択解除してフォルダ選択モードに
+                setViewMode('notes'); // ノートブックを選択したらnotesモードに切り替え
+              }}
             >
               {notebook.image ? (
                 <img 
@@ -137,7 +165,7 @@ const NotebookTree: React.FC<NotebookTreeProps> = ({
               >
                 <Trash2 size={14} />
               </button>
-              <span className="text-xs text-gray-500">{notebook.count || 0}</span>
+              <span className="text-xs text-gray-500">{getActualSubFolderCount(notebook.id)}</span>
             </div>
           </div>
           
@@ -162,7 +190,10 @@ const NotebookTree: React.FC<NotebookTreeProps> = ({
                     </button>
                     <div 
                       className="flex items-center min-w-0 flex-1 cursor-pointer"
-                      onClick={() => onSubFolderSelect(subFolder.id)}
+                      onClick={() => {
+                        onSubFolderSelect(subFolder.id);
+                        setViewMode('notes'); // サブフォルダを選択したらnotesモードに切り替え
+                      }}
                     >
                       {subFolder.image ? (
                         <img 
@@ -193,7 +224,7 @@ const NotebookTree: React.FC<NotebookTreeProps> = ({
                       >
                         <Trash2 size={12} />
                       </button>
-                      <span className="text-xs text-gray-500">{subFolder.count || 0}</span>
+                      <span className="text-xs text-gray-500">{getActualNoteCount(subFolder.id)}</span>
                     </div>
                   </div>
                 </div>

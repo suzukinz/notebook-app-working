@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NoteSpace Offline Sync Phase 1 Test</title>
+    <style>
+        body { font-family: monospace; margin: 20px; background: #f0f0f0; }
+        .test-container { background: white; padding: 20px; border-radius: 8px; margin: 10px 0; }
+        .success { color: #22c55e; }
+        .error { color: #ef4444; }
+        .warning { color: #f59e0b; }
+        .info { color: #3b82f6; }
+        .test-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+        .test-result { margin: 5px 0; padding: 5px 10px; border-left: 4px solid #ccc; }
+        .test-result.success { border-color: #22c55e; background: #f0fdf4; }
+        .test-result.error { border-color: #ef4444; background: #fef2f2; }
+        .test-result.warning { border-color: #f59e0b; background: #fffbeb; }
+        .test-result.info { border-color: #3b82f6; background: #eff6ff; }
+        button { padding: 10px 20px; margin: 10px 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-success { background: #22c55e; color: white; }
+        .btn-warning { background: #f59e0b; color: white; }
+        #results { max-height: 500px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧪 NoteSpace Offline Sync Phase 1 Test</h1>
+    
+    <div class="test-container">
+        <div class="test-title">Service Worker & Offline Sync Validation</div>
+        <button class="btn-primary" onclick="runAllTests()">Run All Tests</button>
+        <button class="btn-success" onclick="testServiceWorker()">Test Service Worker</button>
+        <button class="btn-warning" onclick="testOfflineMode()">Test Offline Mode</button>
+        <button class="btn-primary" onclick="clearResults()">Clear Results</button>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        let results = document.getElementById('results');
+        
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.innerHTML = message;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        function clearResults() {
+            results.innerHTML = '';
+        }
+        
+        async function runAllTests() {
+            clearResults();
+            log('🧪 Starting Phase 1 Offline Sync Test Suite...', 'info');
+            log('');
+            
+            await testServiceWorker();
+            await testLocalStorage();
+            await testOfflineDetection();
+            await testServiceWorkerCommunication();
+            
+            log('');
+            log('✅ Test suite completed!', 'success');
+        }
+        
+        async function testServiceWorker() {
+            log('🔧 Testing Service Worker Registration...', 'info');
+            
+            if (!('serviceWorker' in navigator)) {
+                log('❌ Service Worker not supported in this browser', 'error');
+                return;
+            }
+            
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                log('✅ Service Worker registered successfully', 'success');
+                log(`   Scope: ${registration.scope}`, 'info');
+                log(`   State: ${registration.active?.state || 'unknown'}`, 'info');
+                
+                // Check for updates
+                try {
+                    await registration.update();
+                    log('✅ Service Worker update check completed', 'success');
+                } catch (updateError) {
+                    log(`⚠️  Service Worker update check failed: ${updateError.message}`, 'warning');
+                }
+                
+            } catch (error) {
+                log(`❌ Service Worker registration failed: ${error.message}`, 'error');
+            }
+            
+            // Test if service worker is controlling the page
+            if (navigator.serviceWorker.controller) {
+                log('✅ Service Worker is controlling this page', 'success');
+            } else {
+                log('⚠️  Service Worker is not controlling this page (may need page refresh)', 'warning');
+            }
+        }
+        
+        async function testLocalStorage() {
+            log('💾 Testing LocalStorage Integration...', 'info');
+            
+            try {
+                // Test localStorage functionality
+                const testKey = 'sw-test-' + Date.now();
+                const testData = { test: true, timestamp: Date.now() };
+                
+                localStorage.setItem(testKey, JSON.stringify(testData));
+                const retrieved = JSON.parse(localStorage.getItem(testKey) || '{}');
+                
+                if (retrieved.test === true) {
+                    log('✅ LocalStorage read/write working correctly', 'success');
+                } else {
+                    log('❌ LocalStorage read/write failed', 'error');
+                }
+                
+                localStorage.removeItem(testKey);
+                
+                // Check for existing notebook data
+                const notebookData = localStorage.getItem('notebook-store');
+                if (notebookData) {
+                    log('✅ Found existing notebook data in localStorage', 'success');
+                } else {
+                    log('ℹ️  No existing notebook data found (normal for new installation)', 'info');
+                }
+                
+            } catch (error) {
+                log(`❌ LocalStorage test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testOfflineDetection() {
+            log('🌐 Testing Offline Detection...', 'info');
+            
+            log(`Current online status: ${navigator.onLine ? 'Online' : 'Offline'}`, 'info');
+            
+            // Add event listeners for online/offline
+            let onlineHandler = () => log('✅ Online event detected', 'success');
+            let offlineHandler = () => log('⚠️  Offline event detected', 'warning');
+            
+            window.addEventListener('online', onlineHandler);
+            window.addEventListener('offline', offlineHandler);
+            
+            // Test offline indicator component
+            const offlineIndicators = document.querySelectorAll('[class*="offline"]');
+            if (offlineIndicators.length > 0) {
+                log('✅ Found offline indicator components in DOM', 'success');
+            } else {
+                log('ℹ️  No offline indicator components found', 'info');
+            }
+            
+            // Cleanup
+            setTimeout(() => {
+                window.removeEventListener('online', onlineHandler);
+                window.removeEventListener('offline', offlineHandler);
+            }, 5000);
+        }
+        
+        async function testServiceWorkerCommunication() {
+            log('📡 Testing Service Worker Communication...', 'info');
+            
+            if (!navigator.serviceWorker.controller) {
+                log('⚠️  No active service worker to communicate with', 'warning');
+                return;
+            }
+            
+            try {
+                // Test messaging
+                const channel = new MessageChannel();
+                const messagePromise = new Promise((resolve, reject) => {
+                    channel.port1.onmessage = (event) => {
+                        resolve(event.data);
+                    };
+                    setTimeout(() => reject(new Error('Timeout')), 5000);
+                });
+                
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'PING'
+                }, [channel.port2]);
+                
+                const response = await messagePromise;
+                log('✅ Service Worker communication working', 'success');
+                log(`   Response: ${JSON.stringify(response)}`, 'info');
+                
+            } catch (error) {
+                log(`⚠️  Service Worker communication test failed: ${error.message}`, 'warning');
+            }
+        }
+        
+        async function testOfflineMode() {
+            log('📱 Testing Offline Mode Simulation...', 'info');
+            log('To properly test offline mode:', 'info');
+            log('1. Open DevTools (F12)', 'info');
+            log('2. Go to Application → Service Workers', 'info');
+            log('3. Check "Offline" checkbox', 'info');
+            log('4. Refresh the page and test functionality', 'info');
+            log('5. Verify that the app still works completely', 'info');
+            log('');
+            log('Expected offline behavior:', 'info');
+            log('✅ App loads instantly from cache', 'success');
+            log('✅ All UI interactions work normally', 'success');
+            log('✅ Notes can be created and edited', 'success');
+            log('✅ Changes are queued for sync when online', 'success');
+            log('✅ Offline indicator shows current status', 'success');
+        }
+        
+        // Auto-run basic tests when page loads
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                log('🚀 Auto-running basic Service Worker test...', 'info');
+                testServiceWorker();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

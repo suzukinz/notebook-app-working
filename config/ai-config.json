@@ -1,0 +1,190 @@
+{
+  "hybridAI": {
+    "providers": {
+      "ollama": {
+        "enabled": true,
+        "baseUrl": "http://localhost:11434",
+        "priority": 1,
+        "models": [
+          {
+            "id": "llama3.2:1b",
+            "tasks": ["text-classification", "sentiment-analysis", "entity-extraction"],
+            "maxTokens": 2048,
+            "resourceUsage": "low"
+          },
+          {
+            "id": "llama3.2:3b", 
+            "tasks": ["text-generation", "text-summarization", "question-answering"],
+            "maxTokens": 4096,
+            "resourceUsage": "medium"
+          },
+          {
+            "id": "codellama:7b",
+            "tasks": ["code-generation"],
+            "maxTokens": 8192,
+            "resourceUsage": "high"
+          },
+          {
+            "id": "nomic-embed-text",
+            "tasks": ["text-embedding"],
+            "maxTokens": 512,
+            "resourceUsage": "low"
+          }
+        ]
+      },
+      "huggingface": {
+        "enabled": true,
+        "baseUrl": "http://localhost:8080",
+        "priority": 2,
+        "models": [
+          {
+            "id": "Xenova/distilbert-base-uncased-finetuned-sst-2-english",
+            "tasks": ["sentiment-analysis", "text-classification"],
+            "maxTokens": 512,
+            "resourceUsage": "low"
+          },
+          {
+            "id": "Xenova/all-MiniLM-L6-v2",
+            "tasks": ["text-embedding"],
+            "maxTokens": 512,
+            "resourceUsage": "low"
+          }
+        ]
+      },
+      "cloud": {
+        "enabled": true,
+        "priority": 3,
+        "providers": {
+          "openai": {
+            "models": [
+              {
+                "id": "gpt-4o-mini",
+                "tasks": ["text-generation", "text-summarization", "question-answering", "code-generation"],
+                "maxTokens": 16384,
+                "costPerToken": 0.00015
+              },
+              {
+                "id": "text-embedding-3-small",
+                "tasks": ["text-embedding"],
+                "maxTokens": 8191,
+                "costPerToken": 0.00002
+              }
+            ]
+          }
+        }
+      }
+    },
+    "routing": {
+      "defaultStrategy": "cost-optimized",
+      "strategies": {
+        "privacy-first": {
+          "preferLocal": true,
+          "allowCloud": false,
+          "fallbackToCloud": false
+        },
+        "cost-optimized": {
+          "preferLocal": true,
+          "allowCloud": true,
+          "fallbackToCloud": true,
+          "maxCloudCost": 0.01
+        },
+        "performance-first": {
+          "preferLocal": false,
+          "allowCloud": true,
+          "fallbackToCloud": true,
+          "maxLatency": 2000
+        },
+        "quality-first": {
+          "preferLocal": false,
+          "allowCloud": true,
+          "fallbackToCloud": true,
+          "minQuality": "high"
+        }
+      },
+      "taskRouting": {
+        "text-classification": {
+          "preferredProvider": "ollama",
+          "fallbackProvider": "huggingface",
+          "maxLatency": 1000
+        },
+        "text-generation": {
+          "preferredProvider": "ollama",
+          "fallbackProvider": "cloud",
+          "maxLatency": 3000
+        },
+        "text-embedding": {
+          "preferredProvider": "huggingface",
+          "fallbackProvider": "ollama",
+          "maxLatency": 500
+        },
+        "code-generation": {
+          "preferredProvider": "ollama",
+          "fallbackProvider": "cloud",
+          "maxLatency": 5000
+        }
+      }
+    },
+    "performance": {
+      "caching": {
+        "enabled": true,
+        "ttl": 1800,
+        "maxSize": "500MB",
+        "strategy": "lru"
+      },
+      "batching": {
+        "enabled": true,
+        "maxBatchSize": 10,
+        "batchTimeout": 100
+      },
+      "concurrency": {
+        "maxConcurrentRequests": 10,
+        "queueSize": 100,
+        "timeout": 30000
+      }
+    },
+    "monitoring": {
+      "metricsEnabled": true,
+      "loggingLevel": "info",
+      "healthCheckInterval": 30000,
+      "alerting": {
+        "errorRateThreshold": 0.1,
+        "latencyThreshold": 5000,
+        "modelDownThreshold": 0.8
+      }
+    }
+  },
+  "modelManagement": {
+    "autoDownload": true,
+    "updateCheck": "weekly",
+    "storageLocation": "/app/models",
+    "maxStorageSize": "50GB",
+    "compressionEnabled": true,
+    "models": {
+      "ollama": {
+        "autoUpdate": false,
+        "updateChannel": "stable"
+      },
+      "huggingface": {
+        "autoUpdate": true,
+        "updateChannel": "stable",
+        "cacheEnabled": true
+      }
+    }
+  },
+  "security": {
+    "dataPrivacy": {
+      "logInputs": false,
+      "logOutputs": false,
+      "encryptCache": true,
+      "dataRetention": "7d"
+    },
+    "accessControl": {
+      "apiKeyRequired": true,
+      "rateLimiting": {
+        "enabled": true,
+        "requestsPerMinute": 100,
+        "burstLimit": 20
+      }
+    }
+  }
+}

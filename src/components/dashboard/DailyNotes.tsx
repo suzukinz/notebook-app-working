@@ -17,9 +17,9 @@ const DailyNotes: React.FC<DailyNotesProps> = ({ selectedDate }) => {
   const [hasChanges, setHasChanges] = useState(false);
 
   // 現在選択されている日付のキー
-  const currentDateKey = selectedDate 
-    ? selectedDate.toISOString().split('T')[0]
-    : new Date().toISOString().split('T')[0];
+  const currentDateKey: string = selectedDate 
+    ? selectedDate.toISOString().split('T')[0]!
+    : new Date().toISOString().split('T')[0]!;
 
   // ローカルストレージからメモを読み込む
   useEffect(() => {
@@ -37,7 +37,7 @@ const DailyNotes: React.FC<DailyNotesProps> = ({ selectedDate }) => {
   }, [currentDateKey, dailyNotes]);
 
   const saveNote = () => {
-    const updatedNotes = {
+    const updatedNotes: Record<string, DailyNote> = {
       ...dailyNotes,
       [currentDateKey]: {
         date: currentDateKey,
@@ -103,7 +103,7 @@ const DailyNotes: React.FC<DailyNotesProps> = ({ selectedDate }) => {
 
       {dailyNotes[currentDateKey]?.updatedAt && (
         <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-          最終更新: {new Date(dailyNotes[currentDateKey].updatedAt).toLocaleString('ja-JP')}
+          最終更新: {new Date(dailyNotes[currentDateKey]!.updatedAt).toLocaleString('ja-JP')}
         </div>
       )}
     </div>

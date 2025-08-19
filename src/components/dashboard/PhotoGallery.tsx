@@ -9,8 +9,8 @@ interface Photo {
   source: 'timeline' | 'note';
   title?: string;
   noteTitle?: string;
-  noteId?: number;
-  pageId?: number;
+  noteId?: string; // ✅ ID統一修正: number → string
+  pageId?: string; // ✅ ID統一修正: number → string
   folderPath?: string;
 }
 
@@ -228,7 +228,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ selectedDate }) => {
       } else if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         if (filteredPhotos[centerIndex]) {
-          setSelectedPhoto(filteredPhotos[centerIndex]);
+          setSelectedPhoto(filteredPhotos[centerIndex]!);
         }
       }
     };
@@ -331,11 +331,11 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ selectedDate }) => {
     if (photo.source === 'note' && photo.noteId && photo.folderPath) {
       // ノートデータからノートを検索
       const notes = notesData[photo.folderPath] || [];
-      const note = notes.find(n => n.id === photo.noteId);
+      const note = notes.find(n => n.id === photo.noteId); // ✅ 両方string型で比較
       
       if (note) {
         // ページ番号を取得（photo.pageIdに基づいて）
-        const pageIndex = note.pages.findIndex(p => p.id === photo.pageId);
+        const pageIndex = note.pages.findIndex(p => p.id === photo.pageId); // ✅ 両方string型で比較
         
         setSelectedNote(note);
         setCurrentPage(pageIndex >= 0 ? pageIndex : 0);

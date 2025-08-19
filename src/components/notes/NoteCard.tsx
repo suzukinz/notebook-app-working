@@ -7,12 +7,12 @@ interface NoteCardProps {
   note: Note;
   isSelected: boolean;
   onClick: () => void;
-  onToggleFavorite: (id: number) => void;
-  onTogglePin: (id: number) => void;
-  onDelete: (id: number) => void;
-  onUpdateNote?: (id: number, updates: Partial<Note>) => void;
+  onToggleFavorite: (id: string) => void; // ✅ ID統一修正: number → string
+  onTogglePin: (id: string) => void; // ✅ ID統一修正: number → string
+  onDelete: (id: string) => void; // ✅ ID統一修正: number → string
+  onUpdateNote?: (id: string, updates: Partial<Note>) => void; // ✅ ID統一修正: number → string
   className?: string;
-  viewMode?: 'list' | 'grid';
+  listViewMode?: 'list' | 'grid';
 }
 
 const NoteCard: React.FC<NoteCardProps> = memo(({
@@ -24,7 +24,7 @@ const NoteCard: React.FC<NoteCardProps> = memo(({
   onDelete,
   onUpdateNote,
   className = '',
-  viewMode = 'list'
+  listViewMode = 'list'
 }) => {
   const [showFullTitle, setShowFullTitle] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -51,7 +51,7 @@ const NoteCard: React.FC<NoteCardProps> = memo(({
   // プレビューテキストをメモ化
   const previewText = useMemo(() => {
     if (note.pages.length > 0) {
-      const content = note.pages[0].content;
+      const content = note.pages[0]?.content || '';
       // HTMLタグやMarkdownフォーマットを除去してプレビューテキストを生成
       const plainText = content
         .replace(/<[^>]*>/g, '') // HTMLタグを除去
@@ -69,7 +69,7 @@ const NoteCard: React.FC<NoteCardProps> = memo(({
   // ホバー時のプレビューテキスト（10文字以内、改行対応）
   const hoverPreviewText = useMemo(() => {
     if (note.pages.length > 0) {
-      const content = note.pages[0].content;
+      const content = note.pages[0]?.content || '';
       // HTMLタグやMarkdownフォーマットを除去
       const plainText = content
         .replace(/<[^>]*>/g, '') // HTMLタグを除去
@@ -322,7 +322,7 @@ const NoteCard: React.FC<NoteCardProps> = memo(({
   };
 
   // ビューモードに応じたスタイル
-  const cardStyle = viewMode === 'grid' ? {
+  const cardStyle = listViewMode === 'grid' ? {
     minHeight: '160px', 
     maxHeight: '160px', 
     minWidth: '220px',
@@ -334,7 +334,7 @@ const NoteCard: React.FC<NoteCardProps> = memo(({
     width: '100%'
   };
 
-  if (viewMode === 'list') {
+  if (listViewMode === 'list') {
     // リスト表示：デフォルトはタイトルのみ、ホバー時に詳細表示
     return (
       <>
@@ -397,7 +397,7 @@ const NoteCard: React.FC<NoteCardProps> = memo(({
             <div className="flex items-center space-x-2">
               {/* タグ（1つだけ） */}
               {note.tags.length > 0 && (
-                <TagBadge tag={note.tags[0]} color="blue" size="sm" />
+                <TagBadge tag={note.tags[0]!} color="blue" size="sm" />
               )}
             </div>
             

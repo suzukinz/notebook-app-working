@@ -67,11 +67,11 @@ export const exportData = (storeData: Partial<NotebookState>, options: ExportOpt
     
     workspaceNotebooks.forEach(notebook => {
       if (storeData.subFoldersData?.[notebook.id]) {
-        subFoldersData[notebook.id] = storeData.subFoldersData[notebook.id];
+        subFoldersData[notebook.id] = storeData.subFoldersData[notebook.id]!;
         
-        storeData.subFoldersData[notebook.id].forEach(subFolder => {
+        storeData.subFoldersData[notebook.id]!.forEach(subFolder => {
           if (storeData.notesData?.[subFolder.id]) {
-            notesData[subFolder.id] = storeData.notesData[subFolder.id];
+            notesData[subFolder.id] = storeData.notesData[subFolder.id]!;
           }
         });
       }

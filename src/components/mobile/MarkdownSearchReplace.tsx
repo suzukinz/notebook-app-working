@@ -81,7 +81,7 @@ const MarkdownSearchReplaceComponent: React.FC<MarkdownSearchReplaceProps> = ({
     
     const nextIndex = currentMatchIndex < matches.length - 1 ? currentMatchIndex + 1 : 0;
     setCurrentMatchIndex(nextIndex);
-    onJumpToPosition(matches[nextIndex].start);
+    onJumpToPosition(matches[nextIndex]!.start);
     selectionFeedback();
   };
 
@@ -91,7 +91,7 @@ const MarkdownSearchReplaceComponent: React.FC<MarkdownSearchReplaceProps> = ({
     
     const prevIndex = currentMatchIndex > 0 ? currentMatchIndex - 1 : matches.length - 1;
     setCurrentMatchIndex(prevIndex);
-    onJumpToPosition(matches[prevIndex].start);
+    onJumpToPosition(matches[prevIndex]!.start);
     selectionFeedback();
   };
 

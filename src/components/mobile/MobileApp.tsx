@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useNotebookStore } from '../../store/useNotebookStore';
 import { useHaptics } from '../../hooks/useHaptics';
+import type { Note } from '../../types';
 import MobileEditor from './MobileEditor';
 import MobileMarkdownEditor from './MobileMarkdownEditor';
 import WorkspaceCreateModal from './WorkspaceCreateModal';
@@ -35,6 +36,23 @@ import LoadingSpinner from '../ui/LoadingSpinner';
 
 // Lazy load マインドマップコンポーネント
 const ObsidianGraphView = lazy(() => import('../mindmap/ObsidianGraphView'));
+
+// Helper functions for safe content access
+const getNoteSafeContent = (note: Note): string => {
+  if (!note.pages || note.pages.length === 0 || !note.pages[0] || !note.pages[0].content) {
+    return 'コンテンツなし';
+  }
+  const content = note.pages[0].content.replace(/<[^>]*>/g, '');
+  return content.substring(0, 100) + (content.length > 100 ? '...' : '');
+};
+
+const checkContentMatch = (note: Note, query: string): boolean => {
+  if (!note.pages || note.pages.length === 0 || !note.pages[0] || !note.pages[0].content) {
+    return false;
+  }
+  const content = note.pages[0].content.replace(/<[^>]*>/g, '').toLowerCase();
+  return content.includes(query.toLowerCase());
+};
 
 type MobileTab = 'workspace' | 'notes' | 'mindmap' | 'settings';
 
@@ -90,11 +108,11 @@ const MobileApp: React.FC = () => {
 
   const onTouchStart = (e: React.TouchEvent) => {
     setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
+    setTouchStart(e.targetTouches[0]?.clientX || 0);
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
+    setTouchEnd(e.targetTouches[0]?.clientX || 0);
   };
 
   const onTouchEnd = () => {
@@ -108,10 +126,10 @@ const MobileApp: React.FC = () => {
     const currentIndex = tabs.indexOf(activeTab);
 
     if (isLeftSwipe && currentIndex < tabs.length - 1) {
-      setActiveTab(tabs[currentIndex + 1]);
+      setActiveTab(tabs[currentIndex + 1]!);
     }
     if (isRightSwipe && currentIndex > 0) {
-      setActiveTab(tabs[currentIndex - 1]);
+      setActiveTab(tabs[currentIndex - 1]!);
     }
   };
 
@@ -748,7 +766,7 @@ const MobileApp: React.FC = () => {
                   currentNotes.filter(note => {
                     const matchesSearch = !searchQuery || 
                       note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      (note.pages[0]?.content || '').toLowerCase().includes(searchQuery.toLowerCase());
+                      checkContentMatch(note, searchQuery);
                     const matchesTags = selectedTags.length === 0 || 
                       selectedTags.every(tag => (note.tags || []).includes(tag));
                     return matchesSearch && matchesTags;
@@ -762,7 +780,7 @@ const MobileApp: React.FC = () => {
           {favoriteNotes.filter(note => {
             const matchesSearch = !searchQuery || 
               note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              (note.pages[0]?.content || '').toLowerCase().includes(searchQuery.toLowerCase());
+              checkContentMatch(note, searchQuery);
             const matchesTags = selectedTags.length === 0 || 
               selectedTags.every(tag => (note.tags || []).includes(tag));
             return matchesSearch && matchesTags;
@@ -777,7 +795,7 @@ const MobileApp: React.FC = () => {
                   .filter(note => {
                     const matchesSearch = !searchQuery || 
                       note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      (note.pages[0]?.content || '').toLowerCase().includes(searchQuery.toLowerCase());
+                      checkContentMatch(note, searchQuery);
                     const matchesTags = selectedTags.length === 0 || 
                       selectedTags.every(tag => (note.tags || []).includes(tag));
                     return matchesSearch && matchesTags;
@@ -809,7 +827,7 @@ const MobileApp: React.FC = () => {
                       {note.title}
                     </h3>
                       <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
-                        {(note.pages[0]?.content || '').replace(/<[^>]*>/g, '').substring(0, 100)}...
+                        {getNoteSafeContent(note)}
                       </p>
                       <div className="flex items-center justify-between mt-3">
                         <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -834,7 +852,7 @@ const MobileApp: React.FC = () => {
                 .filter(note => {
                   const matchesSearch = !searchQuery || 
                     note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    (note.pages[0]?.content || '').toLowerCase().includes(searchQuery.toLowerCase());
+                    checkContentMatch(note, searchQuery);
                   const matchesTags = selectedTags.length === 0 || 
                     selectedTags.every(tag => (note.tags || []).includes(tag));
                   return matchesSearch && matchesTags;
@@ -866,7 +884,7 @@ const MobileApp: React.FC = () => {
                       {note.title}
                     </h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
-                      {(note.pages[0]?.content || '').replace(/<[^>]*>/g, '').substring(0, 100)}...
+                      {getNoteSafeContent(note)}
                     </p>
                     <div className="flex items-center justify-between mt-3">
                       <span className="text-xs text-gray-500 dark:text-gray-400">

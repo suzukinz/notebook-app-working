@@ -18,6 +18,8 @@ const RichTextEditor: React.FC<RichTextEditorProps> = React.memo(({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [showToolbar, setShowToolbar] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
 
   // contentが変更されたら初期化フラグをリセット
   useEffect(() => {
@@ -25,6 +27,31 @@ const RichTextEditor: React.FC<RichTextEditorProps> = React.memo(({
       setIsInitialized(false);
     }
   }, [content]);
+
+  // 画面サイズに応じて書式バーの表示を制御
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobile(mobile);
+      
+      // モバイルの場合は書式バーを非表示、デスクトップは表示
+      if (mobile) {
+        setShowToolbar(false);
+      } else {
+        setShowToolbar(true);
+      }
+    };
+
+    // 初期チェック
+    handleResize();
+
+    // リサイズイベントリスナーを追加
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   // 初期コンテンツの設定と更新
   useEffect(() => {
@@ -202,21 +229,47 @@ const RichTextEditor: React.FC<RichTextEditorProps> = React.memo(({
 
   return (
     <div className="flex-1 flex flex-col relative">
-      <div className="border-b border-gray-200 p-2">
-        <div className="flex items-center gap-2">
-          <RichTextToolbar 
-            contentEditableRef={editorRef}
-            onContentChange={handleContentChange}
-          />
+      {showToolbar && (
+        <div className="border-b border-gray-200 p-2">
+          <div className="flex items-center gap-2">
+            <RichTextToolbar 
+              contentEditableRef={editorRef}
+              onContentChange={handleContentChange}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+              title="画像を挿入"
+            >
+              📷
+            </button>
+            
+            {/* 小さい画面で手動表示した場合の隠すボタン */}
+            {isMobile && (
+              <button
+                onClick={() => setShowToolbar(false)}
+                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors ml-auto"
+                title="書式バーを隠す"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* 小さい画面での書式バー表示切り替えボタン */}
+      {!showToolbar && isMobile && (
+        <div className="border-b border-gray-200 p-1 bg-gray-50">
           <button
-            onClick={() => fileInputRef.current?.click()}
-            className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
-            title="画像を挿入"
+            onClick={() => setShowToolbar(true)}
+            className="w-full p-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+            title="書式バーを表示"
           >
-            📷
+            📝 書式設定を表示
           </button>
         </div>
-      </div>
+      )}
       
       <div
         ref={editorRef}

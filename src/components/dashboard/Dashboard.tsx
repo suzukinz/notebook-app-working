@@ -40,7 +40,7 @@ const Dashboard: React.FC = () => {
   const [calendarViewMode, setCalendarViewMode] = React.useState<CalendarViewMode>('month');
   const [scheduleEvents, setScheduleEvents] = React.useState<any[]>([]);
   const [currentDate, setCurrentDate] = React.useState(new Date());
-  const [calendarViewDate, setCalendarViewDate] = React.useState(new Date()); // カレンダー表示用の日付状態
+  const [, setCalendarViewDate] = React.useState(new Date()); // カレンダー表示用の日付状態
   
   // 30秒ごとに現在時刻を更新
   React.useEffect(() => {
@@ -157,9 +157,7 @@ const Dashboard: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 auto-rows-auto">
               {/* 今月の目標 - フル幅 */}
               <div className="lg:col-span-3">
-                <GoalsCarousel 
-                  currentMonth={`${calendarViewDate.getFullYear()}年${calendarViewDate.getMonth() + 1}月`}
-                />
+                <GoalsCarousel />
               </div>
 
               {/* 猫アニメーション - フル幅 */}

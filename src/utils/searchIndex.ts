@@ -4,8 +4,8 @@ import { Note } from '../types';
 interface SearchDocument {
   id: string;
   type: 'note' | 'page';
-  noteId: number;
-  pageId?: number;
+  noteId: string; // ✅ ID統一修正: number → string
+  pageId?: string; // ✅ ID統一修正: number → string
   title: string;
   content: string;
   tags: string[];
@@ -118,7 +118,7 @@ class FullTextSearchIndex {
   }
 
   // ドキュメントを削除
-  removeDocument(noteId: number) {
+  removeDocument(noteId: string) { // ✅ ID統一修正: number → string
     const docIdsToRemove: string[] = [];
     
     this.index.documents.forEach((doc, docId) => {
@@ -150,9 +150,9 @@ class FullTextSearchIndex {
     limit?: number; 
     subFolderId?: string;
     tags?: string[];
-  } = {}): number[] {
+  } = {}): string[] { // ✅ ID統一修正: number[] → string[]
     const queryTokens = this.tokenize(query.toLowerCase());
-    const matchingDocs = new Map<number, number>(); // noteId -> score
+    const matchingDocs = new Map<string, number>(); // ✅ ID統一修正: noteId string → score number
     
     // 各トークンに対してマッチするドキュメントを検索
     queryTokens.forEach(token => {

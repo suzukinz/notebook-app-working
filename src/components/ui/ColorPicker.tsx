@@ -78,9 +78,9 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ onColorSelect, className = ''
 
     // ピクセルデータを取得
     const imageData = ctx.getImageData(x, y, 1, 1);
-    const [r, g, b] = imageData.data;
+    const [r = 0, g = 0, b = 0] = imageData.data;
     
-    const color = rgbToHex(r, g, b);
+    const color = rgbToHex(r || 0, g || 0, b || 0);
     setSelectedColor(color);
     onColorSelect(color);
   }, [onColorSelect]);

@@ -35,7 +35,8 @@ const TagCloud: React.FC<TagCloudProps> = ({ tags }) => {
       'text-pink-600 dark:text-pink-400 bg-pink-100 dark:bg-pink-900',
       'text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900',
     ];
-    return colors[index % colors.length];
+    const colorIndex = index % colors.length;
+    return colors[colorIndex] || colors[0]!;
   };
 
   return (
@@ -58,7 +59,7 @@ const TagCloud: React.FC<TagCloudProps> = ({ tags }) => {
             </span>
             <div className="w-16 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
               <div 
-                className={`h-2 rounded-full ${getColorClass(index).split(' ')[0].replace('text', 'bg')}`}
+                className={`h-2 rounded-full ${getColorClass(index).split(' ')[0]!.replace('text', 'bg')}`}
                 style={{ width: `${(tag.count / maxCount) * 100}%` }}
               />
             </div>

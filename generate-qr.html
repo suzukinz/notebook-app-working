@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Generator for NoteSpace</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        .container { max-width: 500px; margin: 0 auto; }
+        #qrcode { margin: 20px 0; }
+        .url-display { 
+            background: #f5f5f5; 
+            padding: 10px; 
+            border-radius: 5px; 
+            margin: 10px 0;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 NoteSpace QR Code</h1>
+        <p>Scan this QR code with your phone to access NoteSpace:</p>
+        
+        <div id="qrcode"></div>
+        
+        <div class="url-display">
+            <strong>URL:</strong> http://192.168.128.103:8080
+        </div>
+        
+        <p><small>Make sure both devices are on the same WiFi network</small></p>
+    </div>
+    
+    <script>
+        // Generate QR code
+        QRCode.toCanvas(document.getElementById('qrcode'), 'http://192.168.128.103:8080', {
+            width: 300,
+            margin: 2,
+            color: {
+                dark: '#000000',
+                light: '#FFFFFF'
+            }
+        }, function (error) {
+            if (error) console.error(error);
+            console.log('QR code generated successfully!');
+        });
+    </script>
+</body>
+</html>

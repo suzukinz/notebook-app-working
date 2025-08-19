@@ -41,7 +41,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   // 現在のスナップポイントに基づく高さを計算
   const getCurrentHeight = useCallback(() => {
     const point = snapPoints[currentSnapPoint];
-    return `${point * 100}%`;
+    return `${point! * 100}%`;
   }, [snapPoints, currentSnapPoint]);
 
   // 最も近いスナップポイントを見つける
@@ -50,10 +50,10 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
     const heightRatio = height / windowHeight;
     
     let nearestIndex = 0;
-    let minDistance = Math.abs(snapPoints[0] - heightRatio);
+    let minDistance = Math.abs(snapPoints[0]! - heightRatio);
     
     for (let i = 1; i < snapPoints.length; i++) {
-      const distance = Math.abs(snapPoints[i] - heightRatio);
+      const distance = Math.abs(snapPoints[i]! - heightRatio);
       if (distance < minDistance) {
         minDistance = distance;
         nearestIndex = i;
@@ -70,7 +70,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
     const touch = e.touches[0];
     const rect = sheetRef.current?.getBoundingClientRect();
     
-    if (rect) {
+    if (rect && touch) {
       setIsDragging(true);
       setDragStartY(touch.clientY);
       setDragStartHeight(window.innerHeight - rect.top);
@@ -84,6 +84,8 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
     
     e.preventDefault();
     const touch = e.touches[0];
+    if (!touch) return;
+    
     const deltaY = touch.clientY - dragStartY;
     const newHeight = Math.max(0, dragStartHeight - deltaY);
     const maxHeight = window.innerHeight * Math.max(...snapPoints);
@@ -104,7 +106,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
     const newSnapPoint = findNearestSnapPoint(currentHeight);
     
     // 最小スナップポイントより小さい場合は閉じる
-    if (currentHeight < window.innerHeight * snapPoints[0] * 0.7) {
+    if (currentHeight < window.innerHeight * snapPoints[0]! * 0.7) {
       successFeedback();
       onClose();
       return;
@@ -147,7 +149,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
     const currentHeight = sheetRef.current?.getBoundingClientRect().height || 0;
     const newSnapPoint = findNearestSnapPoint(currentHeight);
     
-    if (currentHeight < window.innerHeight * snapPoints[0] * 0.7) {
+    if (currentHeight < window.innerHeight * snapPoints[0]! * 0.7) {
       onClose();
       return;
     }
@@ -289,7 +291,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         {/* スナップポイントインジケーター（デバッグ用、必要に応じて削除） */}
         {process.env.NODE_ENV === 'development' && (
           <div className="absolute top-2 right-2 text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-            {currentSnapPoint + 1}/{snapPoints.length} ({Math.round(snapPoints[currentSnapPoint] * 100)}%)
+            {currentSnapPoint + 1}/{snapPoints.length} ({Math.round(snapPoints[currentSnapPoint]! * 100)}%)
           </div>
         )}
       </div>

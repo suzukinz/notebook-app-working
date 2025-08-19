@@ -350,19 +350,19 @@ export class MarkdownKeyboardShortcuts {
 
     this.getShortcuts().forEach(shortcut => {
       if (['bold', 'italic', 'underline', 'link'].includes(shortcut.action)) {
-        categories['フォーマット'].push(shortcut);
+        categories['フォーマット']!.push(shortcut);
       } else if (shortcut.action.startsWith('heading')) {
-        categories['見出し'].push(shortcut);
+        categories['見出し']!.push(shortcut);
       } else if (shortcut.action.includes('list') || shortcut.action === 'task-list') {
-        categories['リスト'].push(shortcut);
+        categories['リスト']!.push(shortcut);
       } else if (shortcut.action.includes('code') || shortcut.action === 'quote') {
-        categories['コード'].push(shortcut);
+        categories['コード']!.push(shortcut);
       } else if (['find', 'replace'].includes(shortcut.action)) {
-        categories['検索'].push(shortcut);
+        categories['検索']!.push(shortcut);
       } else if (['duplicate-line', 'delete-line', 'indent', 'outdent', 'select-all'].includes(shortcut.action)) {
-        categories['編集'].push(shortcut);
+        categories['編集']!.push(shortcut);
       } else {
-        categories['その他'].push(shortcut);
+        categories['その他']!.push(shortcut);
       }
     });
 

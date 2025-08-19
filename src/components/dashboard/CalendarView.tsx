@@ -25,6 +25,7 @@ interface CalendarViewProps {
   onEventAdd?: (event: Omit<ScheduleEvent, 'id'>) => void;
   onEventEdit?: (event: ScheduleEvent) => void;
   onEventDelete?: (eventId: string) => void;
+  timelineDates?: Date[]; // タイムライン投稿がある日付
 }
 
 const CalendarView: React.FC<CalendarViewProps> = ({ 
@@ -37,7 +38,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   scheduleEvents = [],
   onEventAdd,
   onEventEdit,
-  onEventDelete: _onEventDelete
+  onEventDelete: _onEventDelete,
+  timelineDates = []
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   
@@ -135,7 +137,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     const modes: CalendarViewMode[] = ['month', 'week', 'day'];
     const currentIndex = modes.indexOf(viewMode);
     const nextIndex = (currentIndex + 1) % modes.length;
-    onViewModeChange(modes[nextIndex]);
+    const nextMode = modes[nextIndex];
+    if (nextMode) {
+      onViewModeChange(nextMode);
+    }
   };
 
   const getViewModeIcon = () => {
@@ -187,6 +192,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const isSelected = (date: Date): boolean => {
     if (!selectedDate) return false;
     return date.toDateString() === selectedDate.toDateString();
+  };
+
+  const hasTimelineEntries = (date: Date): boolean => {
+    return timelineDates.some(timelineDate => 
+      timelineDate.toDateString() === date.toDateString()
+    );
   };
 
   // 週間ビューの日付を生成
@@ -261,7 +272,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             <div className="text-xs text-gray-500 p-2 text-right">{time}</div>
             {weekDays.map((day, dayIndex) => {
               const eventsForSlot = getEventsForDay(day).filter(event => 
-                event.startTime.startsWith(time.split(':')[0])
+                event.startTime.startsWith(time.split(':')[0] || '')
               );
               return (
                 <div
@@ -298,7 +309,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         <div className="max-h-96 overflow-y-auto">
           {timeSlots.map((time, index) => {
             const eventsForSlot = eventsForDay.filter(event => 
-              event.startTime.startsWith(time.split(':')[0])
+              event.startTime.startsWith(time.split(':')[0] || '')
             );
             
             return (
@@ -311,7 +322,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   onClick={() => onEventAdd && onEventAdd({
                     title: 'New Event',
                     startTime: time,
-                    endTime: `${(parseInt(time.split(':')[0]) + 1).toString().padStart(2, '0')}:00`,
+                    endTime: `${(parseInt(time.split(':')[0] || '0') + 1).toString().padStart(2, '0')}:00`,
                     date: formatDateKey(currentDate),
                     color: '#3b82f6'
                   })}
@@ -394,6 +405,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               const eventsForDate = getEventsForDay(date);
               const hasNotes = notesForDate.length > 0;
               const hasEvents = eventsForDate.length > 0;
+              const hasTimeline = hasTimelineEntries(date);
               
               return (
                 <button
@@ -405,7 +417,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     ${isCurrentMonth(date) ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-600'}
                     ${isToday(date) ? 'bg-blue-100 dark:bg-blue-900' : ''}
                     ${isSelected(date) ? 'bg-purple-200 dark:bg-purple-800 ring-2 ring-purple-500' : ''}
-                    ${hasNotes || hasEvents || isSelected(date) ? 'hover:bg-gray-100 dark:hover:bg-gray-700' : ''}
+                    ${hasNotes || hasEvents || hasTimeline || isSelected(date) ? 'hover:bg-gray-100 dark:hover:bg-gray-700' : ''}
                     hover:bg-opacity-80
                   `}
                   title="ダブルクリックで予定を追加"
@@ -430,6 +442,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   {hasEvents && (
                     <div className="absolute top-1 right-1">
                       <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    </div>
+                  )}
+                  
+                  {/* タイムラインインジケーター */}
+                  {hasTimeline && (
+                    <div className="absolute top-1 left-1">
+                      <div className="w-2 h-2 bg-orange-500 rounded-full" title="タイムライン投稿があります"></div>
                     </div>
                   )}
                   

@@ -122,7 +122,7 @@ export const useMindMapLayout = () => {
       case 'top': return 'bottom';
       case 'bottom': return 'top';
     }
-  }, [settings.position]);
+  }, [settings]);
 
   return {
     settings,

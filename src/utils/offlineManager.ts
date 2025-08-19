@@ -59,7 +59,44 @@ class OfflineManager {
 
   // Service Workerとの通信設定
   private setupServiceWorkerCommunication(): void {
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    if ('serviceWorker' in navigator) {
+      // Import service worker manager dynamically to avoid circular dependencies
+      import('./serviceWorkerManager').then(({ serviceWorkerManager }) => {
+        // Listen for service worker messages
+        serviceWorkerManager.onMessage((message) => {
+          const { type, data } = message;
+          
+          switch (type) {
+            case 'SYNC_COMPLETE':
+              console.log(`Synced ${data.synced} offline actions`);
+              this.onSyncComplete();
+              break;
+              
+            case 'AUTO_BACKUP_REQUEST':
+              this.handleAutoBackupRequest();
+              break;
+              
+            case 'SW_ACTIVATED':
+              console.log('Service Worker activated, checking for queued actions...');
+              if (this.onlineStatus) {
+                setTimeout(() => this.triggerSync(), 1000);
+              }
+              break;
+              
+            default:
+              console.log('Unknown SW message:', type);
+          }
+        });
+
+        // Register background sync when service worker is ready
+        serviceWorkerManager.waitForControlling().then(() => {
+          this.registerBackgroundSync('offline-sync').catch((error) => {
+            console.warn('Background sync registration failed:', error);
+          });
+        });
+      });
+
+      // Fallback to direct service worker communication
       navigator.serviceWorker.addEventListener('message', (event) => {
         const { type, data } = event.data;
         
@@ -136,7 +173,16 @@ class OfflineManager {
     this.notifyStatusChange();
 
     try {
-      // Service Worker経由で同期
+      // Try service worker manager first
+      try {
+        const { serviceWorkerManager } = await import('./serviceWorkerManager');
+        await serviceWorkerManager.triggerSync();
+        return;
+      } catch (swError) {
+        console.warn('Service worker sync failed, falling back to direct sync:', swError);
+      }
+
+      // Service Worker経由で同期 (fallback)
       if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
         await navigator.serviceWorker.ready;
         return navigator.serviceWorker.controller.postMessage({
@@ -320,20 +366,30 @@ class OfflineManager {
 
   // Background Syncの登録
   public async registerBackgroundSync(tag: string): Promise<void> {
-    if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype) {
-      try {
-        const registration = await navigator.serviceWorker.ready;
-        // TypeScript型定義の問題を回避
-        const syncRegistration = registration as any;
-        if (syncRegistration.sync) {
-          await syncRegistration.sync.register(tag);
-          console.log('Background sync registered:', tag);
+    try {
+      // Try using service worker manager first
+      const { serviceWorkerManager } = await import('./serviceWorkerManager');
+      await serviceWorkerManager.registerBackgroundSync(tag);
+      console.log('Background sync registered via SW manager:', tag);
+    } catch (error) {
+      console.warn('Service worker manager not available, using fallback:', error);
+      
+      // Fallback to direct registration
+      if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype) {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          // TypeScript型定義の問題を回避
+          const syncRegistration = registration as any;
+          if (syncRegistration.sync) {
+            await syncRegistration.sync.register(tag);
+            console.log('Background sync registered (fallback):', tag);
+          }
+        } catch (syncError) {
+          console.error('Background sync registration failed:', syncError);
         }
-      } catch (error) {
-        console.error('Background sync registration failed:', error);
+      } else {
+        console.log('Background sync not supported');
       }
-    } else {
-      console.log('Background sync not supported');
     }
   }
 }

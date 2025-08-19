@@ -120,7 +120,7 @@ class GlobalErrorHandler {
   reportError(error: Error, context?: string) {
     const errorReport: ErrorReport = {
       message: context ? `${context}: ${error.message}` : error.message,
-      stack: error.stack,
+      stack: error.stack || 'No stack trace available',
       timestamp: new Date().toISOString(),
       userAgent: navigator.userAgent,
       pathname: window.location.pathname

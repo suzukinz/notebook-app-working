@@ -286,7 +286,7 @@ const checkNoteIntegrity = (notes: Record<string, Note[]>): string[] => {
       return;
     }
 
-    const seenIds = new Set<number>();
+    const seenIds = new Set<string>(); // ✅ ID統一修正: number → string
 
     noteList.forEach((note, index) => {
       if (!note || typeof note !== 'object') {
@@ -295,15 +295,15 @@ const checkNoteIntegrity = (notes: Record<string, Note[]>): string[] => {
       }
 
       // ID検証
-      if (typeof note.id !== 'number' || note.id <= 0) {
+      if (typeof note.id !== 'string' || !note.id.trim()) { // ✅ ID統一修正: string型チェック
         errors.push(`ノート[${subFolderId}][${index}]: 無効なID`);
       }
 
       // 重複ID検証
-      if (seenIds.has(note.id)) {
+      if (seenIds.has(note.id)) { // ✅ string IDでの重複チェック
         errors.push(`ノート[${subFolderId}][${index}]: 重複したID "${note.id}"`);
       } else {
-        seenIds.add(note.id);
+        seenIds.add(note.id); // ✅ string IDを追加
       }
 
       // タイトル検証

@@ -124,7 +124,7 @@ const MarkdownSyntaxHighlightEditor: React.FC<MarkdownSyntaxHighlightEditorProps
         case 'Tab':
           e.preventDefault();
           if (autoCompleteSuggestions[selectedSuggestionIndex]) {
-            handleAutoCompleteSelect(autoCompleteSuggestions[selectedSuggestionIndex]);
+            handleAutoCompleteSelect(autoCompleteSuggestions[selectedSuggestionIndex]!);
           }
           return;
         case 'Escape':

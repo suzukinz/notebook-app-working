@@ -34,7 +34,7 @@ const MobileEditor: React.FC<MobileEditorProps> = ({ isOpen, onClose }) => {
         initializedRef.current = pageKey;
       }
     }
-  }, [selectedNote?.id, currentPage]);
+  }, [selectedNote, currentPage]);
 
   // 保存処理 - DOM から直接値を取得
   const saveNote = () => {
@@ -71,7 +71,7 @@ const MobileEditor: React.FC<MobileEditorProps> = ({ isOpen, onClose }) => {
   const handleAddPage = () => {
     if (selectedNote) {
       saveNote(); // 現在のページを保存
-      const newPageId = Math.max(...selectedNote.pages.map(p => p.id)) + 1;
+      const newPageId = (Math.max(...selectedNote.pages.map(p => parseInt(p.id) || 0)) + 1).toString(); // ✅ ID統一修正
       const newPage = {
         id: newPageId,
         title: `ページ ${newPageId}`,

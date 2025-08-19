@@ -23,6 +23,8 @@ export const useHandedness = (options: HandednessDetectionOptions = {}) => {
     if (!enableAutoDetection || handedness !== 'auto') return;
 
     const touch = touches[0];
+    if (!touch) return;
+    
     const screenWidth = window.innerWidth;
     const touchX = touch.clientX;
     

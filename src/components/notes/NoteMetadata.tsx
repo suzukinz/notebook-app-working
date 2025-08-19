@@ -182,10 +182,10 @@ const NoteMetadata: React.FC<NoteMetadataProps> = React.memo(({
             <div className="flex items-center gap-2 flex-1">
               <h2 
                 onClick={handleStartEditTitle}
-                className="text-xl font-bold px-2 py-1 cursor-pointer hover:bg-gray-50 rounded transition-colors"
+                className="text-xl font-bold px-2 py-1 cursor-pointer hover:bg-gray-50 rounded transition-colors border-2 border-gray-200 bg-gray-50 min-h-[42px] flex items-center"
                 title="クリックして編集"
               >
-                {title}
+                {title || "ノートタイトルを入力..."}
               </h2>
             </div>
           )}

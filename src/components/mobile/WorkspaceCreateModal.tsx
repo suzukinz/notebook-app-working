@@ -32,8 +32,8 @@ const WorkspaceCreateModal: React.FC<WorkspaceCreateModalProps> = ({ isOpen, onC
       tapFeedback();
       addWorkspace({
         name: name.trim(),
-        icon: selectedIcon,
-        color: selectedColor
+        icon: selectedIcon || '📝',
+        color: selectedColor || '#3b82f6'
       });
       successFeedback();
       handleClose();

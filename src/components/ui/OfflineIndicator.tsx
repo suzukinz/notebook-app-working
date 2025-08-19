@@ -1,12 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Wifi, WifiOff, RefreshCw, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, AlertCircle, CheckCircle, Clock, Shield } from 'lucide-react';
 import { offlineManager, OfflineStatus } from '../../utils/offlineManager';
+
+interface ServiceWorkerStatus {
+  isRegistered: boolean;
+  isControlling: boolean;
+  isWaiting: boolean;
+  version?: string;
+  error?: string;
+}
 
 const OfflineIndicator: React.FC = () => {
   const [status, setStatus] = useState<OfflineStatus>(offlineManager.getStatus());
   const [isVisible, setIsVisible] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [syncInProgress, setSyncInProgress] = useState(false);
+  const [swStatus, setSwStatus] = useState<ServiceWorkerStatus>({
+    isRegistered: false,
+    isControlling: false,
+    isWaiting: false
+  });
 
   useEffect(() => {
     // ステータス変更の監視
@@ -18,6 +31,24 @@ const OfflineIndicator: React.FC = () => {
       if (newStatus.isOnline && !newStatus.hasQueuedActions) {
         setTimeout(() => setIsVisible(false), 3000);
       }
+    });
+
+    // Service Worker ステータスの監視
+    import('../../utils/serviceWorkerManager').then(({ serviceWorkerManager }) => {
+      const swUnsubscribe = serviceWorkerManager.onStatusChange((newSwStatus) => {
+        setSwStatus(newSwStatus);
+      });
+
+      // 初期状態の取得
+      setSwStatus(serviceWorkerManager.getStatus());
+
+      return () => {
+        unsubscribe();
+        swUnsubscribe();
+      };
+    }).catch(() => {
+      // Service Worker Manager が利用できない場合
+      console.warn('Service Worker Manager not available');
     });
 
     // 初期表示判定
@@ -193,6 +224,17 @@ const OfflineIndicator: React.FC = () => {
                 <span className="text-gray-700">最終同期</span>
                 <span className="text-gray-600">
                   {formatLastSync(status.lastSyncTime)}
+                </span>
+              </div>
+
+              {/* Service Worker状態 */}
+              <div className="flex items-center justify-between">
+                <span className="text-gray-700">オフライン機能</span>
+                <span className={`flex items-center ${
+                  swStatus.isControlling ? 'text-green-600' : 'text-gray-500'
+                }`}>
+                  <Shield size={16} className="mr-1" />
+                  {swStatus.isControlling ? '有効' : '無効'}
                 </span>
               </div>
 

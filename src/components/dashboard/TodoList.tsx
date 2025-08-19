@@ -118,11 +118,11 @@ const TodoList: React.FC<TodoListProps> = ({ selectedDate }) => {
       const todo: Todo = {
         id: Date.now().toString(),
         text: newTodo.trim(),
-        description: newDescription.trim() || undefined,
+        ...(newDescription.trim() && { description: newDescription.trim() }),
         completed: false,
         createdAt: new Date().toISOString(),
         priority: selectedPriority,
-        dueDate: dueDate || undefined
+        ...(dueDate && { dueDate })
       };
       
       setTodos(prevTodos => [...prevTodos, todo]);
@@ -168,7 +168,6 @@ const TodoList: React.FC<TodoListProps> = ({ selectedDate }) => {
     }
   };
 
-  const currentMonth = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
 
   // 期限による分類
   const today = new Date();
@@ -209,14 +208,14 @@ const TodoList: React.FC<TodoListProps> = ({ selectedDate }) => {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-3">
           <CheckSquare className="w-6 h-6 text-indigo-500" />
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{currentMonth}のやることリスト</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">やることリスト</h2>
         </div>
         <button
           onClick={() => setShowAddForm(!showAddForm)}
           className="flex items-center space-x-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
         >
           <Plus className="w-4 h-4" />
-          <span>タスク追加</span>
+          <span>追加</span>
         </button>
       </div>
 
@@ -308,7 +307,7 @@ const TodoList: React.FC<TodoListProps> = ({ selectedDate }) => {
                           {todo.completed ? <CheckCircle className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
                         </button>
                         
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 mr-4">
                           {editingTodo === todo.id ? (
                             <div className="space-y-2">
                               <input
@@ -316,39 +315,41 @@ const TodoList: React.FC<TodoListProps> = ({ selectedDate }) => {
                                 defaultValue={todo.text}
                                 onBlur={(e) => updateTodo(todo.id, { text: e.target.value })}
                                 onKeyPress={(e) => e.key === 'Enter' && updateTodo(todo.id, { text: (e.target as HTMLInputElement).value })}
-                                className="w-full px-2 py-1 text-lg font-medium bg-white/20 border border-white/30 rounded text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-white/50"
+                                className="w-full px-3 py-2 text-lg font-medium bg-white/20 border border-white/30 rounded text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-white/50"
                                 autoFocus
                               />
                             </div>
                           ) : (
                             <>
-                              <div className="flex items-center justify-between mb-2">
-                                <h3 className={`text-lg font-medium text-white ${
-                                  todo.completed ? 'line-through opacity-70' : ''
-                                }`}>
-                                  {todo.text}
-                                </h3>
-                                <div className="flex items-center space-x-2">
-                                  <span className={`px-2 py-1 text-xs rounded-full border ${getPriorityColor(todo.priority)}`}>
-                                    {getPriorityLabel(todo.priority)}
-                                  </span>
-                                  <button
-                                    onClick={() => setEditingTodo(todo.id)}
-                                    className="text-white/70 hover:text-white transition-colors"
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => deleteTodo(todo.id)}
-                                    className="text-white/70 hover:text-red-300 transition-colors"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
+                              <div className="mb-2">
+                                <div className="flex items-start justify-between">
+                                  <h3 className={`text-lg font-medium text-white flex-1 mr-3 ${
+                                    todo.completed ? 'line-through opacity-70' : ''
+                                  }`}>
+                                    {todo.text}
+                                  </h3>
+                                  <div className="flex items-center space-x-2 flex-shrink-0">
+                                    <span className={`px-2 py-1 text-xs rounded-full border ${getPriorityColor(todo.priority)}`}>
+                                      {getPriorityLabel(todo.priority)}
+                                    </span>
+                                    <button
+                                      onClick={() => setEditingTodo(todo.id)}
+                                      className="text-white/70 hover:text-white transition-colors"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => deleteTodo(todo.id)}
+                                      className="text-white/70 hover:text-red-300 transition-colors"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                               
                               {todo.description && (
-                                <p className={`text-sm text-white/80 mb-3 ${
+                                <p className={`text-sm text-white/80 mb-3 pr-16 ${
                                   todo.completed ? 'line-through opacity-70' : ''
                                 }`}>
                                   {todo.description}

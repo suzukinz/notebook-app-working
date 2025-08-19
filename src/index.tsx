@@ -13,24 +13,33 @@ root.render(
   </React.StrictMode>
 );
 
-// Service Worker - COMPLETELY DISABLED and UNREGISTERED
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    registrations.forEach((registration) => {
-      registration.unregister().then(() => {
-        console.log('✅ Service Worker unregistered successfully');
+// Service Worker Registration - Phase 1 Offline Support
+if (false && (process.env.NODE_ENV === 'production' || process.env.REACT_APP_ENABLE_SW === 'true')) {
+  import('./utils/serviceWorkerManager').then(({ serviceWorkerManager }) => {
+    serviceWorkerManager.register().then((registration) => {
+      console.log('✅ Service Worker registered successfully:', registration.scope);
+      
+      // Setup update notifications
+      window.addEventListener('sw-update-available', (event: any) => {
+        const { detail } = event;
+        console.log('🔄 Service Worker update available:', detail.message);
+        
+        // You can integrate this with your UI notification system
+        if (window.confirm('A new version is available. Update now?')) {
+          detail.action();
+        }
       });
+      
+      // Enable background sync for offline operations
+      serviceWorkerManager.registerBackgroundSync('offline-sync').catch((error) => {
+        console.warn('⚠️ Background sync registration failed:', error.message);
+      });
+      
+    }).catch((error) => {
+      console.error('❌ Service Worker registration failed:', error);
     });
   });
-  
-  // Clear all caches
-  if ('caches' in window) {
-    caches.keys().then((cacheNames) => {
-      cacheNames.forEach((cacheName) => {
-        caches.delete(cacheName).then(() => {
-          console.log('✅ Cache deleted:', cacheName);
-        });
-      });
-    });
-  }
+} else {
+  console.log('🔧 Service Worker disabled in development mode');
+  console.log('🔧 Set REACT_APP_ENABLE_SW=true to enable in development');
 }

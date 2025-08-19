@@ -32,7 +32,7 @@ const TagFilter: React.FC<TagFilterProps> = ({
     // Tag[]型の配列に変換
     return Object.entries(tagCounts).map(([name, count], index) => ({
       name,
-      color: tagColors[index % tagColors.length],
+      color: tagColors[index % tagColors.length] || 'blue',
       count
     }));
   };
